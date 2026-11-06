@@ -30,7 +30,11 @@ ui_*.h
 Makefile*
 *build-*
 build/
+/build-*/
+# 不要写 build*/ —— 会把 buildroot/ 包定义一起忽略掉
 *.qm
+/HMI-T113S4
+/HMI-T113S4.exe
 *.prl
 *.qmlls.ini
 
