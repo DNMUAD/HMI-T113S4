@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qss/style.qss</file>
+    </qresource>
+    <qresource prefix="/image">
+        <file>Icon/common/down_arrow.png</file>
+        <file>Icon/common/left_arrow.png</file>
+        <file>Icon/common/right_arrow.png</file>
+        <file>Icon/common/up_arrow.png</file>
+    </qresource>
+</RCC>

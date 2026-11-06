@@ -1,0 +1,236 @@
+/************** QGroupBox ***************/
+QGroupBox {
+    border: 1px solid grey;
+    border-radius: 0px;
+    margin-top: 15px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    position: relative;
+    left: 12px;
+    padding: -2 2px;
+}
+
+/************** QLineEdit ***************/
+QLineEdit {
+    border: 1px solid #C8D5EA;
+    background-color: white;
+    color: #3C4457;
+    min-height: 30px;
+    max-height: 30px;
+}
+QLineEdit:disabled {
+    background-color: #F0F0F0;
+}
+/**********  QTextEdit  **********/
+QTextEdit {
+    border: 1px solid #C8D5EA;
+    background-color: white;
+    color: #3C4457;
+}
+/************** QSlider ***************/
+QSlider {
+    background-color: transparent;
+    border: none;
+    height: 40px;
+}
+QSlider::groove:horizontal {
+    background-color: rgb(164, 217, 240);
+    height: 5px;
+}
+QSlider::groove:horizontal:focus {
+    background-color: rgb(164, 217, 240);
+    height: 5px;
+}
+QSlider::handle:horizontal {
+    background-color: rgb(65, 135, 240);
+    height: 30px;
+    width: 10px;
+    border: none;
+    border-radius: 4px;
+    margin: -15px 0px; /* 上下空白 -20px, 左右空白 0px */
+}
+QSlider::handle:horizontal:hover {
+    background-color: rgb(200, 100, 50);
+}
+QSlider::handle:horizontal:focus {
+    background-color: rgb(200, 100, 50);
+}
+QSlider::sub-page:horizontal {
+    background-color: rgb(0, 223, 0);
+}
+
+/************** QDoubleSpinBox/QSpinBox ***************/
+QDoubleSpinBox,
+QSpinBox {
+    border: 1px solid #C8D5EA;
+    background-color: white;
+    color: #3C4457;
+    font-size: 16px;
+    min-width: 80px;
+    max-width: 200px;
+    min-height: 40px;
+    max-height: 40px;
+}
+QDoubleSpinBox:disabled,
+QSpinBox:disabled {
+    background-color: #F0F0F0;
+}
+QDoubleSpinBox::up-button,
+QSpinBox::up-button {
+    image: none;
+}
+QDoubleSpinBox::up-button:pressed,
+QSpinBox::up-button:pressed {
+    padding-top: 1px;
+    padding-left: 1px;
+}
+QDoubleSpinBox::down-button,
+QSpinBox::down-button {
+    image: none;
+}
+QDoubleSpinBox::down-button:pressed,
+QSpinBox::down-button:pressed {
+    padding-top: 1px;
+    padding-left: 1px;
+}
+/**********  进度条  **********/
+QProgressBar{
+    border: none;
+    border-radius: 0px;
+}
+QProgressBar::chunk{
+    background-color: #42C734;
+}
+
+/**********滚动条-水平**********/
+QScrollArea {
+    background-color: transparent;
+}
+QScrollBar:horizontal {
+    height: 20px;
+    background: transparent;
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+QScrollBar::handle:horizontal {
+    height: 20px;
+    min-width: 30px;
+    background: #cdcdcd;
+    margin-left: 15px;
+    margin-right: 15px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #a6a6a6;
+}
+QScrollBar::sub-line:horizontal {
+    width: 15px;
+    background: transparent;
+    image: url(:/image/Icon/common/left_arrow.png);
+    subcontrol-position: left;
+}
+QScrollBar::add-line:horizontal {
+    width: 15px;
+    background: transparent;
+    image: url(:/image/Icon/common/right_arrow.png);
+    subcontrol-position: right;
+}
+QScrollBar::sub-line:horizontal:hover {
+    background: rgb(170, 200, 230);
+}
+QScrollBar::add-line:horizontal:hover {
+    background: rgb(170, 200, 230);
+}
+QScrollBar::add-page:horizontal,QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
+
+/**********滚动条-垂直**********/
+QScrollBar:vertical {
+    width: 20px;
+    background: transparent;
+    padding-top: 15px;
+    padding-bottom: 15px;
+    margin-left: 3px;
+    margin-right: 3px;
+}
+QScrollBar::handle:vertical {
+    width: 20px;
+    min-height: 30px;
+    background: #cdcdcd;
+}
+QScrollBar::handle:vertical:hover {
+    background: #a6a6a6;
+}
+QScrollBar::sub-line:vertical {
+    height: 15px;
+    background: transparent;
+    image: url(:/image/Icon/common/up_arrow.png);
+    subcontrol-position: top;
+}
+QScrollBar::add-line:vertical {
+    height: 15px;
+    background: transparent;
+    image: url(:/image/Icon/common/down_arrow.png);
+    subcontrol-position: bottom;
+}
+QScrollBar::sub-line:vertical:hover {
+    background: rgb(170, 200, 230);
+}
+QScrollBar::add-line:vertical:hover {
+    background: rgb(170, 200, 230);
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+QScrollBar#verticalScrollBar:vertical {
+    margin-top: 30px;
+}
+
+
+/************** 框架空壳新增 **************/
+#centralRoot {
+    background-color: #FFFFFF;
+}
+#titleBar {
+    background-color: #2F3A4A;
+}
+#titleLabel {
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: bold;
+}
+#clockLabel {
+    color: #C8D5EA;
+    font-size: 14px;
+}
+#statusBar {
+    background-color: #EEF2F7;
+    border-top: 1px solid #C8D5EA;
+}
+#stateLabel, #versionLabel {
+    color: #3C4457;
+    font-size: 13px;
+}
+#pageTitle {
+    color: #2F3A4A;
+    font-size: 24px;
+    font-weight: bold;
+}
+#pageDesc {
+    color: #3C4457;
+    font-size: 15px;
+}
+#primaryButton {
+    background-color: #4187F0;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 4px;
+    font-size: 15px;
+}
+#primaryButton:hover {
+    background-color: #2F6FD0;
+}
+#primaryButton:pressed {
+    background-color: #2559A8;
+}
