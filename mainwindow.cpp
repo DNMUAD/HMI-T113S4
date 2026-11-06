@@ -1,157 +1,210 @@
 #include "mainwindow.h"
 
-#include "appversion.h"
-#include "baseview.h"
-#include "homeview.h"
-#include "settingview.h"
+#include "basepage.h"
+#include "cardbutton.h"
+#include "logpanel.h"
+#include "pagefactory.h"
+#include "serviceregistry.h"
+#include "statusbus.h"
+#include "statusdot.h"
 
+#include <QAbstractItemView>
 #include <QDateTime>
 #include <QHBoxLayout>
-#include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QWidget>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
+    , m_nav(nullptr)
     , m_stack(nullptr)
-    , m_titleLabel(nullptr)
-    , m_clockLabel(nullptr)
-    , m_stateLabel(nullptr)
-    , m_versionLabel(nullptr)
+    , m_log(nullptr)
+    , m_clock(nullptr)
     , m_clockTimer(nullptr)
-    , m_currentIndex(-1)
+    , m_current(-1)
 {
     buildUi();
+    buildPages();
+    buildStatusBar();
+    subscribeStatus();
 
-    HomeView *home = new HomeView(this);
-    SettingView *setting = new SettingView(this);
-    addView(home);
-    addView(setting);
-
-    connect(home, &HomeView::requestPage, this, &MainWindow::setCurrentIndex);
-
-    setCurrentIndex(0);
-}
-
-MainWindow::~MainWindow()
-{
-}
-
-void MainWindow::buildUi()
-{
-    setWindowTitle(QStringLiteral(APP_NAME));
-    resize(1024, 600);
-
-    QWidget *central = new QWidget(this);
-    central->setObjectName(QStringLiteral("centralRoot"));
-
-    QVBoxLayout *rootLayout = new QVBoxLayout(central);
-    rootLayout->setContentsMargins(0, 0, 0, 0);
-    rootLayout->setSpacing(0);
-
-    rootLayout->addWidget(createTitleBar());
-
-    m_stack = new QStackedWidget(central);
-    m_stack->setObjectName(QStringLiteral("contentStack"));
-    rootLayout->addWidget(m_stack, 1);
-
-    rootLayout->addWidget(createStatusBar());
-
-    setCentralWidget(central);
+    setCurrentPage(0);
 
     m_clockTimer = new QTimer(this);
     m_clockTimer->setInterval(1000);
     connect(m_clockTimer, &QTimer::timeout, this, &MainWindow::updateClock);
     m_clockTimer->start();
     updateClock();
+
+    // 服务注册表接管周期探测：各服务按自己声明的间隔刷新（替代原先写死的 5s 定时器）
+    ServiceRegistry::instance()->start(1000);
 }
 
-QWidget *MainWindow::createTitleBar()
+void MainWindow::buildUi()
 {
-    QWidget *bar = new QWidget(this);
-    bar->setObjectName(QStringLiteral("titleBar"));
-    bar->setFixedHeight(48);
+    setWindowTitle(tr("HMI-T113S4"));
+    resize(1024, 600);                  // 板载屏 1024x600
 
-    QHBoxLayout *layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(16, 0, 16, 0);
-    layout->setSpacing(12);
+    QWidget *central = new QWidget(this);
+    central->setObjectName(QStringLiteral("centralRoot"));
+    QHBoxLayout *root = new QHBoxLayout(central);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
 
-    m_titleLabel = new QLabel(QStringLiteral(APP_NAME), bar);
-    m_titleLabel->setObjectName(QStringLiteral("titleLabel"));
+    // ---- 左导航 ----
+    QWidget *left = new QWidget(central);
+    left->setObjectName(QStringLiteral("navPanel"));
+    left->setFixedWidth(180);           // 硬约定 180px
+    QVBoxLayout *leftLayout = new QVBoxLayout(left);
+    leftLayout->setContentsMargins(8, 8, 8, 8);
+    leftLayout->setSpacing(8);
 
-    m_clockLabel = new QLabel(bar);
-    m_clockLabel->setObjectName(QStringLiteral("clockLabel"));
+    CardButton *home = new CardButton(tr("总 览"), left);
+    home->setObjectName(QStringLiteral("homeButton"));
+    home->setAccent(true);
+    connect(home, &QPushButton::clicked, this, [this]() { setCurrentPage(0); });
+    leftLayout->addWidget(home);
 
-    layout->addWidget(m_titleLabel);
-    layout->addStretch(1);
-    layout->addWidget(m_clockLabel);
+    m_nav = new QListWidget(left);
+    m_nav->setObjectName(QStringLiteral("navList"));
+    m_nav->setFixedWidth(164);
+    m_nav->setFrameShape(QListWidget::NoFrame);
+    m_nav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nav->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    connect(m_nav, &QListWidget::currentRowChanged, this, &MainWindow::onNavChanged);
+    leftLayout->addWidget(m_nav, 1);
+    root->addWidget(left);
 
-    return bar;
+    // ---- 右侧内容 + 统一日志 ----
+    QWidget *right = new QWidget(central);
+    QVBoxLayout *rightLayout = new QVBoxLayout(right);
+    rightLayout->setContentsMargins(8, 8, 8, 4);
+    rightLayout->setSpacing(6);
+
+    m_stack = new QStackedWidget(right);
+    m_stack->setObjectName(QStringLiteral("contentStack"));
+    m_stack->setMinimumWidth(844);      // 设计基准 844x600，实际由布局自适应
+    rightLayout->addWidget(m_stack, 1);
+
+    m_log = LogPanel::instance();       // 全局唯一，页面共用
+    m_log->setFixedHeight(150);
+    m_log->setParent(right);
+    rightLayout->addWidget(m_log);
+
+    root->addWidget(right, 1);
+    setCentralWidget(central);
 }
 
-QWidget *MainWindow::createStatusBar()
+void MainWindow::buildPages()
 {
-    QWidget *bar = new QWidget(this);
+    // 页面全部来自注册表：新增页面只需新建文件 + 一行 HMI_REGISTER_PAGE，
+    // 本函数与导航都不需要改（开闭原则）。
+    const QList<PageFactory::Entry> entries = PageFactory::instance()->entries();
+    for (int i = 0; i < entries.size(); ++i) {
+        const PageFactory::Entry &entry = entries.at(i);
+        BasePage *page = PageFactory::instance()->create(entry.id, this);
+        if (!page)
+            continue;
+
+        const int stackIndex = m_pages.size();
+        m_pages << page;
+        m_stack->addWidget(page);
+
+        if (entry.navText.isEmpty())
+            continue;                       // 总览页不占导航项
+
+        QListWidgetItem *item = new QListWidgetItem(entry.navText, m_nav);
+        item->setSizeHint(QSize(164, 56));  // 触摸友好 ≥56px
+        item->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+        m_navPages << stackIndex;
+    }
+}
+
+void MainWindow::buildStatusBar()
+{
+    QStatusBar *bar = statusBar();
     bar->setObjectName(QStringLiteral("statusBar"));
-    bar->setFixedHeight(28);
+    bar->setSizeGripEnabled(false);
+    bar->setFixedHeight(36);
 
-    QHBoxLayout *layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(16, 0, 16, 0);
-    layout->setSpacing(12);
+    m_clock = new QLabel(bar);
+    m_clock->setObjectName(QStringLiteral("clockLabel"));
 
-    m_stateLabel = new QLabel(QStringLiteral("通信状态：未连接"), bar);
-    m_stateLabel->setObjectName(QStringLiteral("stateLabel"));
+    // 状态灯与 device id 绑定：新增设备只在服务里 publish，这里加一行即可
+    StatusDot *wifiDot = new StatusDot(tr("WiFi"), bar);
+    StatusDot *ethDot  = new StatusDot(tr("ETH"), bar);
+    StatusDot *adbDot  = new StatusDot(tr("ADB"), bar);
+    m_dots.insert(QStringLiteral("wifi"), wifiDot);
+    m_dots.insert(QStringLiteral("eth"), ethDot);
+    m_dots.insert(QStringLiteral("adb"), adbDot);
 
-    m_versionLabel = new QLabel(QStringLiteral("v") + QStringLiteral(APP_VERSION), bar);
-    m_versionLabel->setObjectName(QStringLiteral("versionLabel"));
-
-    layout->addWidget(m_stateLabel);
-    layout->addStretch(1);
-    layout->addWidget(m_versionLabel);
-
-    return bar;
+    bar->addPermanentWidget(m_clock);
+    bar->addPermanentWidget(wifiDot);
+    bar->addPermanentWidget(ethDot);
+    bar->addPermanentWidget(adbDot);
 }
 
-void MainWindow::addView(BaseView *view)
+void MainWindow::subscribeStatus()
 {
-    if (!view || !m_stack)
-        return;
-    m_stack->addWidget(view);
+    connect(StatusBus::instance(), &StatusBus::changed, this, &MainWindow::onStatusChanged);
+
+    const QList<DeviceStatus> known = StatusBus::instance()->snapshot();
+    for (int i = 0; i < known.size(); ++i)
+        onStatusChanged(known.at(i));
 }
 
-int MainWindow::currentIndex() const
+void MainWindow::onStatusChanged(const DeviceStatus &status)
 {
-    return m_currentIndex;
-}
-
-void MainWindow::setCurrentIndex(int index)
-{
-    if (!m_stack || index < 0 || index >= m_stack->count())
-        return;
-    if (index == m_currentIndex)
+    StatusDot *dot = m_dots.value(status.device);
+    if (!dot)
         return;
 
-    if (m_currentIndex >= 0) {
-        if (BaseView *oldView = qobject_cast<BaseView *>(m_stack->widget(m_currentIndex)))
-            oldView->onLeave();
+    switch (status.state) {
+    case DeviceReady: dot->setLevel(StatusDot::On);    break;
+    case DeviceBusy:  dot->setLevel(StatusDot::Busy);  break;
+    case DeviceError: dot->setLevel(StatusDot::Error); break;
+    case DeviceOff:
+    case DeviceUnknown:
+    default:          dot->setLevel(StatusDot::Off);   break;
     }
+    dot->setText(status.detail.isEmpty() ? deviceStateName(status.state) : status.detail);
+}
 
-    m_stack->setCurrentIndex(index);
-    m_currentIndex = index;
+void MainWindow::onNavChanged(int row)
+{
+    if (row < 0 || row >= m_navPages.size())
+        return;
+    setCurrentPage(m_navPages.at(row));
+}
 
-    if (BaseView *view = qobject_cast<BaseView *>(m_stack->widget(index))) {
-        view->onEnter();
-        m_titleLabel->setText(QStringLiteral(APP_NAME) + QStringLiteral("  |  ") + view->title());
+void MainWindow::setCurrentPage(int stackIndex)
+{
+    if (stackIndex < 0 || stackIndex >= m_stack->count() || stackIndex == m_current)
+        return;
+
+    if (m_current >= 0 && m_current < m_pages.size())
+        m_pages.at(m_current)->onLeave();
+
+    m_stack->setCurrentIndex(stackIndex);
+    m_current = stackIndex;
+    m_pages.at(stackIndex)->onEnter();
+
+    const int row = m_navPages.indexOf(stackIndex);
+    QSignalBlocker blocker(m_nav);
+    if (row >= 0) {
+        if (m_nav->currentRow() != row)
+            m_nav->setCurrentRow(row);
+    } else {
+        m_nav->clearSelection();
     }
-
-    emit currentViewChanged(index);
 }
 
 void MainWindow::updateClock()
 {
-    if (m_clockLabel)
-        m_clockLabel->setText(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss")));
+    m_clock->setText(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss")));
 }
-
