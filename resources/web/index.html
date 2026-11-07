@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#185fa5">
+<title>设备文件管理</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span id="device-name">设备文件管理</span>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-up" class="btn ghost" type="button">上级</button>
+    <button id="btn-refresh" class="btn ghost" type="button">刷新</button>
+  </div>
+</header>
+
+<nav id="roots" class="chips" aria-label="存储位置"></nav>
+<div id="crumb" class="crumb"></div>
+
+<main class="list-wrap">
+  <ul id="list" class="list"></ul>
+  <p id="empty" class="empty" hidden>这个目录是空的</p>
+  <p id="loading" class="empty" hidden>读取中…</p>
+</main>
+
+<footer class="toolbar">
+  <button id="btn-upload" class="btn primary" type="button">上传文件</button>
+  <button id="btn-mkdir" class="btn" type="button">新建文件夹</button>
+  <span id="usage" class="usage"></span>
+  <input id="file-input" type="file" multiple hidden>
+</footer>
+
+<div id="progress" class="progress" hidden>
+  <div class="progress-track"><i id="progress-fill"></i></div>
+  <span id="progress-text">准备上传…</span>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

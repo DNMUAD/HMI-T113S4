@@ -1,5 +1,6 @@
 #include "basepage.h"
 #include "cardbutton.h"
+#include "uimetrics.h"
 
 #include <QLabel>
 #include <QScrollArea>
@@ -19,13 +20,14 @@ BasePage::BasePage(const QString &title, QWidget *parent)
     setObjectName(QStringLiteral("basePage"));
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    root->setContentsMargins(20, 14, 20, 10);
-    root->setSpacing(10);
+    root->setContentsMargins(UiMetrics::PageMarginH, UiMetrics::PageMarginTop,
+                             UiMetrics::PageMarginH, UiMetrics::PageMarginBot);
+    root->setSpacing(UiMetrics::PageSpacing);
 
     QLabel *titleLabel = new QLabel(m_title, this);
     titleLabel->setObjectName(QStringLiteral("pageTitle"));
     QFont f = titleLabel->font();
-    f.setPointSize(20);
+    f.setPointSize(UiMetrics::TitlePointSize);
     f.setBold(true);
     titleLabel->setFont(f);           // 只改字号/粗细，字体族交 fontconfig
     root->addWidget(titleLabel);
@@ -39,13 +41,13 @@ BasePage::BasePage(const QString &title, QWidget *parent)
     m_status = new QLabel(tr("就绪"), this);
     m_status->setObjectName(QStringLiteral("pageStatus"));
     m_status->setWordWrap(true);
-    m_status->setMinimumHeight(36);
+    m_status->setMinimumHeight(UiMetrics::StatusHeight);
     root->addWidget(m_status);
 
     QWidget *body = new QWidget(this);
     m_body = new QVBoxLayout(body);
-    m_body->setContentsMargins(2, 2, 2, 2);
-    m_body->setSpacing(10);
+    m_body->setContentsMargins(0, 0, 0, 0);
+    m_body->setSpacing(UiMetrics::PageSpacing);
 
     m_scroll = new QScrollArea(this);
     m_scroll->setWidgetResizable(true);
@@ -65,6 +67,11 @@ void BasePage::initialize()
         return;
     m_initialized = true;
     buildContent();      // 子类钩子（虚函数，此时对象已完整构造，能正确派发）
+
+    // 内容末尾补一个弹性占位：否则 QVBoxLayout 会把剩余高度均摊给各控件，
+    // 让一个普通 QLabel 撑成一大块空白（I2C 页的「尚未扫描」就是这样）。
+    // 加在 buildContent 之后，保证它永远是最后一项。
+    m_body->addStretch(1);
 }
 
 bool BasePage::isInitialized() const
@@ -106,7 +113,9 @@ QGridLayout *BasePage::addGrid()
     QWidget *holder = new QWidget(this);
     QGridLayout *grid = new QGridLayout(holder);
     grid->setContentsMargins(0, 0, 0, 0);
-    grid->setSpacing(10);
+    grid->setSpacing(UiMetrics::PageSpacing);
+    grid->setColumnStretch(0, 1);       // 两列等宽，卡片边界沿同一条线对齐
+    grid->setColumnStretch(1, 1);
     m_body->addWidget(holder);
     return grid;
 }

@@ -1,120 +1,141 @@
 /* HMI-T113S4 — 1024x600 触摸界面
-   字体族不在此硬编码：全局 QFont 只设 16pt，中文由 rootfs 的 wqy-zenhei + fontconfig 解析。 */
+   字体族不在此硬编码：全局 QFont 按 ui/fontSize(默认 14pt) 设置，
+   中文由 rootfs 的 wqy-zenhei + fontconfig 解析。
+   尺寸与 widgets/uimetrics.h 一一对应，改一处记得同步另一边：
+     NavItemHeight 44 / ButtonHeight 44 / LogHeight 128 / StatusBarHeight 30
+     TitlePointSize 18 / TextPointSize 14 / HintPointSize 12 / StatusPointSize 13 / LogPointSize 10 */
 
 #centralRoot { background-color: #F4F6FA; }
+
+/* 页面滚动区透明：否则内容不满一屏时下半部会露出一大块白色 viewport，
+   和页面底色割裂，看起来像"空了一块" */
+#basePage QScrollArea,
+#basePage QScrollArea > QWidget > QWidget { background: transparent; border: none; }
 
 #navPanel { background-color: #2F3A4A; }
 
 #navList {
     background-color: transparent;
     color: #DCE6F5;
-    font-size: 16pt;
+    font-size: 14pt;
     border: none;
     outline: none;
 }
 #navList::item {
-    height: 56px;
-    padding-left: 12px;
+    height: 44px;
+    padding-left: 10px;
     border-radius: 4px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 #navList::item:hover { background-color: #3C4A5E; }
 #navList::item:selected { background-color: #4187F0; color: #FFFFFF; }
+#navList::item:focus { border: none; outline: none; }
 
-#pageTitle   { color: #2F3A4A; font-size: 20pt; font-weight: bold; }
-#pageIntro   { color: #3C4457; font-size: 16pt; }
-#sysInfo     { color: #3C4457; font-size: 16pt; background: #FFFFFF;
-               border: 1px solid #C8D5EA; border-radius: 4px; padding: 10px; }
-#pageStatus  { color: #1E8E3E; font-size: 16pt; }
+#pageTitle   { color: #2F3A4A; font-size: 18pt; font-weight: bold; }
+#pageIntro   { color: #3C4457; font-size: 13pt; }
+#sysInfo     { color: #3C4457; font-size: 13pt; background: #FFFFFF;
+               border: 1px solid #C8D5EA; border-radius: 4px; padding: 8px; }
+#pageStatus  { color: #1E8E3E; font-size: 13pt; }
 
 #pageHint {
     background-color: #FFF6E0;
     border: 1px solid #E8C877;
     border-radius: 4px;
     color: #7A5B00;
-    font-size: 14pt;
-    padding: 8px 10px;
+    font-size: 12pt;
+    padding: 6px 8px;
 }
 
 #videoPlaceholder {
     background-color: #20262F;
     border: 1px solid #4A5568;
     border-radius: 4px;
-    color: #C8D5EA;
-    font-size: 16pt;
 }
+/* 子 QLabel 的 color 不会从父控件继承，必须单列一条，否则深底上几乎看不见 */
+#videoPlaceholderText { color: #D5E2F5; font-size: 13pt; background: transparent; }
+
+#upgradeProgress {
+    min-height: 18px; max-height: 18px;
+    border: 1px solid #C8D5EA;
+    border-radius: 4px;
+    background: #FFFFFF;
+    text-align: center;
+    color: #2F3A4A;
+    font-size: 10pt;
+}
+#upgradeProgress::chunk { background: #4187F0; border-radius: 3px; }
 
 #logPanel { background-color: transparent; }
-#logTitle { color: #2F3A4A; font-size: 13pt; text-align: left; }
+#logTitle { color: #5A6474; font-size: 11pt; }
 #logView  { background-color: #FFFFFF; color: #2F3A4A;
-            border: 1px solid #C8D5EA; border-radius: 4px; font-size: 12pt; }
+            border: 1px solid #C8D5EA; border-radius: 4px; font-size: 10pt; }
 #logClearButton {
-    min-height: 56px; max-width: 160px;
+    min-height: 28px; max-height: 28px; max-width: 76px;
     background-color: #EEF2F7; color: #2F3A4A;
-    border: 1px solid #C8D5EA; border-radius: 4px; font-size: 15pt;
+    border: 1px solid #C8D5EA; border-radius: 4px; font-size: 10pt;
 }
 #logClearButton:pressed { background-color: #DCE8FA; }
 
 QLineEdit, QComboBox, QSpinBox {
-    min-height: 56px;
-    max-height: 64px;
-    font-size: 16pt;
+    min-height: 34px;
+    max-height: 38px;
+    font-size: 13pt;
     color: #3C4457;
     background-color: #FFFFFF;
     border: 1px solid #C8D5EA;
     border-radius: 4px;
-    padding: 0 10px;
+    padding: 0 8px;
 }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 2px solid #4187F0; }
-QComboBox::drop-down { width: 44px; border-left: 1px solid #C8D5EA; }
-QComboBox QAbstractItemView { min-height: 44px; font-size: 16pt; selection-background-color: #4187F0; }
-QSpinBox::up-button, QSpinBox::down-button { width: 44px; }
+QComboBox::drop-down { width: 30px; border-left: 1px solid #C8D5EA; }
+QComboBox QAbstractItemView { min-height: 30px; font-size: 13pt; selection-background-color: #4187F0; }
+QSpinBox::up-button, QSpinBox::down-button { width: 30px; }
 
 QPlainTextEdit {
-    font-size: 12pt;
+    font-size: 11pt;
     color: #3C4457;
     background-color: #FFFFFF;
     border: 1px solid #C8D5EA;
     border-radius: 4px;
 }
 
-QSlider { min-height: 48px; }
-QSlider::groove:horizontal { height: 8px; background: #C8D5EA; border-radius: 4px; }
-QSlider::sub-page:horizontal { background: #4187F0; border-radius: 4px; }
+QSlider { min-height: 30px; }
+QSlider::groove:horizontal { height: 6px; background: #C8D5EA; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: #4187F0; border-radius: 3px; }
 QSlider::handle:horizontal {
-    width: 32px; height: 32px; margin: -12px 0;
-    background: #FFFFFF; border: 2px solid #4187F0; border-radius: 16px;
+    width: 22px; height: 22px; margin: -8px 0;
+    background: #FFFFFF; border: 2px solid #4187F0; border-radius: 11px;
 }
 
 QStatusBar, #statusBar {
     background-color: #EEF2F7;
     border-top: 1px solid #C8D5EA;
     color: #2F3A4A;
-    font-size: 13pt;
+    font-size: 11pt;
 }
 QStatusBar::item { border: none; }
-#clockLabel { color: #2F3A4A; font-size: 13pt; padding-right: 12px; }
+#clockLabel { color: #2F3A4A; font-size: 11pt; padding-right: 8px; }
 
-QScrollBar:vertical { width: 22px; background: transparent; margin: 16px 0 16px 0; }
-QScrollBar::handle:vertical { min-height: 40px; background: #C8D5EA; border-radius: 8px; }
+QScrollBar:vertical { width: 16px; background: transparent; margin: 12px 0 12px 0; }
+QScrollBar::handle:vertical { min-height: 28px; background: #C8D5EA; border-radius: 7px; }
 QScrollBar::sub-line:vertical {
-    height: 16px; subcontrol-position: top; subcontrol-origin: margin;
+    height: 12px; subcontrol-position: top; subcontrol-origin: margin;
     image: url(:/image/Icon/common/up_arrow.png);
 }
 QScrollBar::add-line:vertical {
-    height: 16px; subcontrol-position: bottom; subcontrol-origin: margin;
+    height: 12px; subcontrol-position: bottom; subcontrol-origin: margin;
     image: url(:/image/Icon/common/down_arrow.png);
 }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 
-QScrollBar:horizontal { height: 22px; background: transparent; margin: 0 16px 0 16px; }
-QScrollBar::handle:horizontal { min-width: 40px; background: #C8D5EA; border-radius: 8px; }
+QScrollBar:horizontal { height: 16px; background: transparent; margin: 0 12px 0 12px; }
+QScrollBar::handle:horizontal { min-width: 28px; background: #C8D5EA; border-radius: 7px; }
 QScrollBar::sub-line:horizontal {
-    width: 16px; subcontrol-position: left; subcontrol-origin: margin;
+    width: 12px; subcontrol-position: left; subcontrol-origin: margin;
     image: url(:/image/Icon/common/left_arrow.png);
 }
 QScrollBar::add-line:horizontal {
-    width: 16px; subcontrol-position: right; subcontrol-origin: margin;
+    width: 12px; subcontrol-position: right; subcontrol-origin: margin;
     image: url(:/image/Icon/common/right_arrow.png);
 }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }

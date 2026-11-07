@@ -7,10 +7,10 @@
 class StatusDot : public QWidget
 {
     Q_OBJECT
-    Q_ENUM(Level)
 
 public:
     enum Level { Off, On, Busy, Warn, Error };
+    Q_ENUM(Level)
 
     explicit StatusDot(const QString &label, QWidget *parent = nullptr);
 

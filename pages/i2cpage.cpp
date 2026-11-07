@@ -28,14 +28,12 @@ void I2cPage::buildContent()
     m_address->setDisplayIntegerBase(16);
     m_address->setPrefix(QStringLiteral("0x"));
     m_address->setValue(0x5d);
-    m_address->setMinimumHeight(56);
     addWidget(m_address);
 
     m_register = new QSpinBox(this);
     m_register->setRange(0x00, 0xFF);
     m_register->setDisplayIntegerBase(16);
     m_register->setPrefix(QStringLiteral("0x"));
-    m_register->setMinimumHeight(56);
     addWidget(m_register);
 
     QGridLayout *grid = addGrid();

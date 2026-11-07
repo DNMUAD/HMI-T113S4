@@ -11,7 +11,9 @@ HEADERS += \
     $$PWD/canpage.h \
     $$PWD/gpadcpage.h \
     $$PWD/ethpage.h \
-    $$PWD/adbpage.h
+    $$PWD/adbpage.h \
+    $$PWD/websharepage.h \
+    $$PWD/upgradepage.h
 
 SOURCES += \
     $$PWD/basepage.cpp \
@@ -24,4 +26,6 @@ SOURCES += \
     $$PWD/canpage.cpp \
     $$PWD/gpadcpage.cpp \
     $$PWD/ethpage.cpp \
-    $$PWD/adbpage.cpp
+    $$PWD/adbpage.cpp \
+    $$PWD/websharepage.cpp \
+    $$PWD/upgradepage.cpp

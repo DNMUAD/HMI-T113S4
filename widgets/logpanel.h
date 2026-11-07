@@ -11,10 +11,10 @@ class QPushButton;
 class LogPanel : public QWidget
 {
     Q_OBJECT
-    Q_ENUM(Level)
 
 public:
     enum Level { Info, Ok, Warn, Error, Debug };
+    Q_ENUM(Level)
 
     // 唯一实例，须在 GUI 线程首次创建（MainWindow 构造时已创建）。
     static LogPanel *instance();

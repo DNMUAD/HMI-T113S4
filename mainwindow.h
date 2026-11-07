@@ -9,10 +9,12 @@
 #include "devicestatus.h"
 
 class QListWidget;
+class QListWidgetItem;
 class QStackedWidget;
 class QLabel;
 class QTimer;
 class BasePage;
+class CardButton;
 class LogPanel;
 class StatusDot;
 
@@ -34,7 +36,7 @@ public slots:
 
 private slots:
     void updateClock();
-    void onNavChanged(int row);
+    void onNavItemClicked(QListWidgetItem *item);
     void onStatusChanged(const DeviceStatus &status);
 
 private:
@@ -45,6 +47,7 @@ private:
 
     QListWidget    *m_nav;
     QStackedWidget *m_stack;
+    CardButton     *m_homeButton;
     LogPanel       *m_log;
     QLabel         *m_clock;
     QTimer         *m_clockTimer;

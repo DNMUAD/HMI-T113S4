@@ -5,9 +5,12 @@
 #include "mainwindow.h"
 #include "processrunner.h"
 #include "simulatedcommandrunner.h"
+#include "upgradeservice.h"
+#include "webshareservice.h"
 
 #include <QApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QFont>
 #include <QLocalServer>
@@ -17,6 +20,7 @@
 #include <QTimer>
 
 #include <cstdio>
+#include <functional>
 
 namespace {
 
@@ -71,6 +75,68 @@ void applyStyleSheet(QApplication &app)
     app.setStyleSheet(QString::fromUtf8(f.readAll()));
 }
 
+// 等升级服务进入某个状态，或超时。返回是否在超时前命中。
+bool waitUpgradeState(UpgradeService *svc,
+                      const std::function<bool (UpgradeService::State)> &pred,
+                      int timeoutMs)
+{
+    if (pred(svc->state()))
+        return true;
+
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    bool hit = false;
+    QObject::connect(svc, &UpgradeService::stateChanged, &loop,
+                     [&](UpgradeService::State s) {
+        if (pred(s)) {
+            hit = true;
+            loop.quit();
+        }
+    });
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(timeoutMs);
+    loop.exec();
+    return hit;
+}
+
+// --upgrade-selftest：无人值守跑 扫描 → 校验 → 安装 → 回滚，用于验收与现场排查。
+// 安装后立刻回滚，不改变设备最终状态；退出码 0 表示全链路通过。
+int runUpgradeSelfTest()
+{
+    UpgradeService *svc = UpgradeService::instance();
+
+    svc->scan();
+    qInfo("[selftest] scan    state=%d media=%s pkg=%d",
+          int(svc->state()), qPrintable(svc->mediaPath()), int(svc->hasPackage()));
+    if (!svc->hasPackage()) {
+        qInfo("[selftest] 没有可用升级包：%s", qPrintable(svc->message()));
+        return 3;
+    }
+
+    svc->verify();
+    waitUpgradeState(svc, [](UpgradeService::State s) {
+        return s == UpgradeService::Verified || s == UpgradeService::VerifyFailed;
+    }, 20000);
+    const bool verified = (svc->state() == UpgradeService::Verified);
+    qInfo("[selftest] verify  %s  %s", verified ? "OK  " : "FAIL", qPrintable(svc->message()));
+    if (!verified)
+        return 4;
+
+    svc->install();
+    waitUpgradeState(svc, [](UpgradeService::State s) {
+        return s == UpgradeService::Installed || s == UpgradeService::InstallFailed;
+    }, 30000);
+    const bool installed = (svc->state() == UpgradeService::Installed);
+    qInfo("[selftest] install %s  %s", installed ? "OK  " : "FAIL", qPrintable(svc->message()));
+    if (!installed)
+        return 5;
+
+    svc->rollback();
+    qInfo("[selftest] rollback %s", qPrintable(svc->message()));
+    return 0;
+}
+
 void hmiMessageHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
 {
     const QByteArray line = msg.toLocal8Bit();
@@ -114,10 +180,10 @@ int main(int argc, char *argv[])
     if (!server.listen(QString::fromLatin1(kInstanceServer)))
         qWarning("single-instance server: %s", qPrintable(server.errorString()));
 
-    // 全局配置 /etc/hmi.ini（只读；板端可改，桌面开发时不存在则走默认值）
+    // 全局配置：板端 /etc/hmi.ini，Windows 桌面版读程序目录下的 hmi.ini（不存在则全走平台默认值）
     // 单例 + 外观：键名、默认值、钳制范围都收在 AppSettings 里
     AppSettings *settings = AppSettings::instance();
-    settings->load(QStringLiteral("/etc/hmi.ini"));
+    settings->load(AppSettings::platformConfigPath());
 
     const QStringList args = app.arguments();
     const bool windowed = args.contains(QStringLiteral("--windowed"));
@@ -150,6 +216,12 @@ int main(int argc, char *argv[])
                    LogPanel::Ok);
 
     MainWindow w;
+
+    // 局域网网页文件管理：默认随程序启动，ini 里 web/autostart=false 可关掉
+    if (settings->value(QStringLiteral("web/autostart"), QStringLiteral("true"))
+            .compare(QStringLiteral("false"), Qt::CaseInsensitive) != 0) {
+        WebShareService::instance()->start();
+    }
     QObject::connect(&server, &QLocalServer::newConnection, [&server, &w]() {
         QLocalSocket *conn = server.nextPendingConnection();
         if (conn) {
@@ -165,9 +237,25 @@ int main(int argc, char *argv[])
     else
         w.show();
 
+    // 升级链路自检：不依赖界面，跑完 扫描→校验→安装→回滚 即退出
+    if (args.contains(QStringLiteral("--upgrade-selftest")))
+        return runUpgradeSelfTest();
+
     const int pageArg = args.indexOf(QStringLiteral("--page"));
     if (pageArg > 0 && pageArg + 1 < args.size())
         w.setCurrentPage(args.at(pageArg + 1).toInt());
+
+    // UI 回归用：--page N --shot out.png 抓取指定页的控件渲染结果后退出。
+    // QWidget::grab() 直接渲染控件树，不受窗口遮挡/最小化影响，可脚本化比对。
+    const int shotArg = args.indexOf(QStringLiteral("--shot"));
+    if (shotArg > 0 && shotArg + 1 < args.size()) {
+        const QString shotPath = args.at(shotArg + 1);
+        QTimer::singleShot(700, &w, [&w, shotPath]() {
+            if (!w.grab().save(shotPath))
+                qWarning("截图保存失败: %s", qPrintable(shotPath));
+            QCoreApplication::quit();
+        });
+    }
 
     // 离屏自检：QT_QPA_PLATFORM=offscreen ./HMI-T113S4 --selftest
     if (args.contains(QStringLiteral("--selftest")))

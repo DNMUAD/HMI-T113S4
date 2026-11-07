@@ -29,6 +29,16 @@ public:
         Creator creator;
     };
 
+    // 登记项：pagefactory.cpp 的排序比较器要拿它当参数类型，
+    // 因此必须放在 public 段（嵌套类型同样受访问控制）。
+    struct Registration
+    {
+        QString     id;
+        const char *navSource;
+        int         order;
+        Creator     creator;
+    };
+
     static PageFactory *instance();
 
     // navSource 传未翻译的源串（QT_TR_NOOP 的字符串字面量），nullptr 表示不进导航
@@ -41,14 +51,6 @@ public:
 
 private:
     PageFactory();
-
-    struct Registration
-    {
-        QString     id;
-        const char *navSource;
-        int         order;
-        Creator     creator;
-    };
 
     QList<Registration> m_registrations;
 };

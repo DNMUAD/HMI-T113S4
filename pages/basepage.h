@@ -4,11 +4,12 @@
 #include <QWidget>
 #include <functional>
 
+#include "cardbutton.h"
+
 class QLabel;
 class QVBoxLayout;
 class QGridLayout;
 class QScrollArea;
-class CardButton;
 
 // 所有功能页的统一基类：标题 + 常驻提示 + 状态行 + 可滚动内容区。
 // 统一 LogPanel 由 MainWindow 持有，页面不各自建日志控件。

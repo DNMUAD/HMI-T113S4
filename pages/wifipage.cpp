@@ -29,13 +29,11 @@ void WifiPage::buildContent()
 
     m_ssid = new QLineEdit(this);
     m_ssid->setPlaceholderText(tr("SSID（可从下方扫描结果双击带入）"));
-    m_ssid->setMinimumHeight(56);
     addWidget(m_ssid);
 
     m_password = new QLineEdit(this);
     m_password->setPlaceholderText(tr("密码"));
     m_password->setEchoMode(QLineEdit::Password);
-    m_password->setMinimumHeight(56);
     addWidget(m_password);
 
     QGridLayout *grid = addGrid();

@@ -30,25 +30,21 @@ void CanPage::buildContent()
     m_iface = new QComboBox(this);
     m_iface->setEditable(true);
     m_iface->addItems(QStringList() << QStringLiteral("awlink0") << QStringLiteral("awlink1"));
-    m_iface->setMinimumHeight(56);
     addWidget(m_iface);
 
     m_bitrate = new QComboBox(this);
     m_bitrate->addItems(QStringList() << QStringLiteral("125000") << QStringLiteral("250000")
                                       << QStringLiteral("500000") << QStringLiteral("1000000"));
-    m_bitrate->setMinimumHeight(56);
     addWidget(m_bitrate);
 
     m_frameType = new QComboBox(this);
     m_frameType->addItems(QStringList() << tr("标准帧") << tr("扩展帧"));
-    m_frameType->setMinimumHeight(56);
     addWidget(m_frameType);
 
     m_period = new QSpinBox(this);
     m_period->setRange(0, 5000);
     m_period->setSuffix(tr(" ms"));
     m_period->setValue(1000);
-    m_period->setMinimumHeight(56);
     addWidget(m_period);
 
     m_status = new QLabel(tr("未检测"), this);

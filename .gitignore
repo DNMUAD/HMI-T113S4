@@ -31,7 +31,7 @@ Makefile*
 *build-*
 build/
 /build-*/
-# 不要写 build*/ —— 会把 buildroot/ 包定义一起忽略掉
+# 不要写成 build*/ —— 会误伤同名源码目录
 *.qm
 /HMI-T113S4
 /HMI-T113S4.exe
@@ -58,3 +58,10 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# Windows 本地构建产物（tools/build-win.sh 生成）
+/build-win/
+/dist/
+
+# UI 回归截图（--shot / tools/ui_probe.py 生成，随时可重跑）
+/docs/shots/

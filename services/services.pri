@@ -9,7 +9,10 @@ HEADERS += \
     $$PWD/i2cservice.h \
     $$PWD/rs485service.h \
     $$PWD/gpadcservice.h \
-    $$PWD/mediaservice.h
+    $$PWD/mediaservice.h \
+    $$PWD/fileservice.h \
+    $$PWD/webshareservice.h \
+    $$PWD/upgradeservice.h
 
 SOURCES += \
     $$PWD/processrunner.cpp \
@@ -20,4 +23,7 @@ SOURCES += \
     $$PWD/i2cservice.cpp \
     $$PWD/rs485service.cpp \
     $$PWD/gpadcservice.cpp \
-    $$PWD/mediaservice.cpp
+    $$PWD/mediaservice.cpp \
+    $$PWD/fileservice.cpp \
+    $$PWD/webshareservice.cpp \
+    $$PWD/upgradeservice.cpp

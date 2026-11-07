@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 桌面 Kit / 本地生成 resources/i18n/*.qm（buildroot 由 .mk 自动做，无需手动跑）
+# 本地生成 resources/i18n/*.qm（.pro 里已用 lrelease 自动嵌入，此脚本用于单独产出 .qm）
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 LRELEASE="${LRELEASE:-lrelease}"

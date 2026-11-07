@@ -25,16 +25,18 @@ void MediaPage::buildContent()
 
     QFrame *video = new QFrame(this);
     video->setObjectName(QStringLiteral("videoPlaceholder"));
-    video->setMinimumHeight(200);
+    // 占位区固定高度：原来 200px 把下面的播放按钮全挤出可视区。
+    // M4 接入真实 QVideoWidget 后改成随窗口伸缩即可。
+    video->setFixedHeight(120);
     video->setFrameShape(QFrame::Box);
     QLabel *ph = new QLabel(tr("视频输出区（M4 接 QVideoWidget）"), video);
+    ph->setObjectName(QStringLiteral("videoPlaceholderText"));   // 颜色单独给，QSS 不继承到子控件
     ph->setAlignment(Qt::AlignCenter);
     QGridLayout *phLayout = new QGridLayout(video);
     phLayout->addWidget(ph, 0, 0, Qt::AlignCenter);
     addWidget(video);
 
     m_fileList = new QComboBox(this);
-    m_fileList->setMinimumHeight(56);
     addWidget(m_fileList);
     reloadMediaList();
 

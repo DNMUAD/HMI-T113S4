@@ -17,7 +17,9 @@ HEADERS += \
     $$PWD/command.h \
     $$PWD/commandinvoker.h \
     $$PWD/pagefactory.h \
-    $$PWD/playerstate.h
+    $$PWD/playerstate.h \
+    $$PWD/qrcode.h \
+    $$PWD/httpserver.h
 
 SOURCES += \
     $$PWD/appsettings.cpp \
@@ -34,4 +36,6 @@ SOURCES += \
     $$PWD/command.cpp \
     $$PWD/commandinvoker.cpp \
     $$PWD/pagefactory.cpp \
-    $$PWD/playerstate.cpp
+    $$PWD/playerstate.cpp \
+    $$PWD/qrcode.cpp \
+    $$PWD/httpserver.cpp

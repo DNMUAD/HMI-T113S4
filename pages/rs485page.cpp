@@ -25,13 +25,11 @@ void Rs485Page::buildContent()
     m_port = new QComboBox(this);
     m_port->setEditable(true);
     m_port->addItems(Rs485Service::availablePorts());
-    m_port->setMinimumHeight(56);
     addWidget(m_port);
 
     m_baud = new QComboBox(this);
     m_baud->addItems(Rs485Service::baudRates());
     m_baud->setCurrentText(QStringLiteral("115200"));
-    m_baud->setMinimumHeight(56);
     addWidget(m_baud);
 
     QGridLayout *grid = addGrid();
@@ -42,7 +40,6 @@ void Rs485Page::buildContent()
 
     m_sendText = new QLineEdit(this);
     m_sendText->setPlaceholderText(tr("发送内容（与 USB-485 对端互测，或 TX/RX 短接回环）"));
-    m_sendText->setMinimumHeight(56);
     addWidget(m_sendText);
     addButton(tr("发送"), [this]() {
         Rs485Service::instance()->send(m_sendText->text().toUtf8());

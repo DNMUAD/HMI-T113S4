@@ -17,6 +17,10 @@ class AppSettings : public QObject
 public:
     static AppSettings *instance();
 
+    // 板端读 /etc/hmi.ini；Windows 桌面版读程序目录下的 hmi.ini。
+    // 文件不存在时 QSettings 读不到任何键，调用方保留平台默认值。
+    static QString platformConfigPath();
+
     void load(const QString &path = QString());
     QString path() const;
 

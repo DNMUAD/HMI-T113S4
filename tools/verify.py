@@ -150,7 +150,7 @@ def main():
     if 'CONFIG += c++11' not in pro_text and 'CONFIG += c++1' not in pro_text:
         err('.pro 未启用 C++11')
     if not re.search(r'^TARGET\s*=\s*HMI-T113S4\s*$', pro_text, re.M):
-        err('TARGET 必须保留 HMI-T113S4（改名只在 buildroot 安装行做）')
+        err('TARGET 必须保留 HMI-T113S4（改名只在部署/升级时做）')
 
     # 2) 所有含 Q_OBJECT 的头文件必须列入 HEADERS（否则 moc 不生成）
     declared = {os.path.basename(p) for p in sections['HEADERS']}
@@ -174,6 +174,8 @@ def main():
         if not os.path.isfile(src):
             continue
         for inc in re.findall(r'#include\s+"([^"]+)"', read(src)):
+            if inc.endswith('.moc'):
+                continue          # moc 生成的中间文件，不落盘
             if os.path.basename(inc) not in known:
                 err('%s 引用了不存在的本地头: %s' % (os.path.relpath(src, ROOT), inc))
 
@@ -243,13 +245,14 @@ def main():
 
     # 8) 触摸 / 日志 / 布局约定
     checks = [
-        ('widgets/cardbutton.cpp', 'setMinimumHeight(56)', '按钮高 ≥56px'),
+        ('widgets/cardbutton.cpp', 'UiMetrics::ButtonHeight', '按钮高度取自 UiMetrics'),
         ('widgets/logpanel.cpp', 'setMaximumBlockCount(500)', 'LogPanel 限 500 行'),
         ('widgets/logpanel.cpp', 'setReadOnly(true)', 'LogPanel 只读'),
-        ('mainwindow.cpp', 'setFixedWidth(180)', '左导航 180px'),
-        ('mainwindow.cpp', 'setMinimumWidth(844)', '内容区 844px 基准'),
-        ('mainwindow.cpp', 'setSizeHint(QSize(164, 56))', '导航项 ≥56px'),
-        ('main.cpp', '/etc/hmi.ini', 'QSettings /etc/hmi.ini'),
+        ('mainwindow.cpp', 'UiMetrics::NavWidth', '左导航宽度取自 UiMetrics'),
+        ('mainwindow.cpp', 'UiMetrics::NavItemHeight', '导航项高度取自 UiMetrics'),
+        ('mainwindow.cpp', 'UiMetrics::LogHeight', '日志高度取自 UiMetrics'),
+        ('core/appsettings.cpp', '/etc/hmi.ini', 'QSettings /etc/hmi.ini（板端路径）'),
+        ('core/appsettings.cpp', 'platformConfigPath', '配置路径按平台选择'),
         ('main.cpp', 'setPointSize(', '全局字号（不硬编码字体族）'),
         ('main.cpp', 'QLocalServer', '单实例'),
         ('mainwindow.cpp', 'new StatusDot', '状态栏状态灯'),
@@ -263,11 +266,21 @@ def main():
     if 'setFontFamily' in pro_text or 'setFamily' in read(abspath('main.cpp')):
         err('代码里不得硬编码字体族（中文靠 wqy-zenhei + fontconfig）')
 
+    # 8.1) 尺寸唯一来源：控件尺寸必须集中在 widgets/uimetrics.h，不允许再散落魔法数字
+    if not os.path.isfile(abspath('widgets', 'uimetrics.h')):
+        err('缺少 widgets/uimetrics.h（界面尺寸的唯一来源）')
+    else:
+        um = read(abspath('widgets', 'uimetrics.h'))
+        for key in ('NavWidth', 'NavItemHeight', 'ButtonHeight',
+                    'LogHeight', 'StatusBarHeight', 'TitlePointSize'):
+            if key not in um:
+                err('uimetrics.h 缺少常量 %s' % key)
+
     # 9) 页面 / 服务自注册：9 项导航 + 10 个页面 + 8 个服务
     page_files = [f for f in os.listdir(abspath('pages'))
                   if f.endswith('page.h') and f != 'basepage.h']
-    if len(page_files) != 10:
-        err('pages/ 应有 10 个页面头文件（不含 basepage.h），实际 %d' % len(page_files))
+    if len(page_files) != 12:
+        err('pages/ 应有 12 个页面头文件（不含 basepage.h），实际 %d' % len(page_files))
 
     registrations = []
     for fn in sorted(os.listdir(abspath('pages'))):
@@ -285,10 +298,10 @@ def main():
         registrations.append((m.group(1), int(m.group(2)), m.group(4), m.group(5)))
 
     nav_count = sum(1 for r in registrations if r[2] is not None)
-    if len(registrations) != 10:
-        err('自注册页面应为 10 个，实际 %d' % len(registrations))
-    if nav_count != 9:
-        err('左导航应为 9 项（总览页不占导航），实际 %d 项' % nav_count)
+    if len(registrations) != 12:
+        err('自注册页面应为 12 个，实际 %d' % len(registrations))
+    if nav_count != 11:
+        err('左导航应为 11 项（总览页不占导航），实际 %d 项' % nav_count)
     ids = [r[0] for r in registrations]
     if len(set(ids)) != len(ids):
         err('页面 id 重复: %s' % ', '.join(sorted(ids)))
@@ -300,20 +313,17 @@ def main():
         err('总览页应唯一且 order=0（它必须是 QStackedWidget 第 0 页）')
 
     svc = [f for f in os.listdir(abspath('services')) if f.endswith('service.h')]
-    if len(svc) != 8:
-        warn('services/ 业务服务数 = %d（约定列表为 8 个 + processrunner）' % len(svc))
+    if len(svc) != 11:
+        warn('services/ 业务服务数 = %d（预期 11 个：9 个设备服务 + 文件后端 + 网页服务）' % len(svc))
     for fn in sorted(os.listdir(abspath('services'))):
-        if fn.endswith('service.cpp') and 'HMI_REGISTER_SERVICE(' not in read(abspath('services', fn)):
+        if not fn.endswith('service.cpp') or fn == 'fileservice.cpp':
+            continue                      # fileservice 是纯文件后端，不对外发布设备状态
+        if 'HMI_REGISTER_SERVICE(' not in read(abspath('services', fn)):
             err('服务未在 ServiceRegistry 自注册: services/%s' % fn)
 
-    # 10) buildroot 三件套 / 部署 / 配置
+    # 10) 交付文件 / 配置
+    # 板端相关（buildroot 包定义、交叉编译与 adb 部署脚本）已随「只做桌面版」移除
     must = [
-        'buildroot/config/buildroot/allwinner/auto/qt-demo/hmi-t113s4/Config.in',
-        'buildroot/config/buildroot/allwinner/auto/qt-demo/hmi-t113s4/hmi-t113s4.mk',
-        'buildroot/config/buildroot/allwinner/auto/Config.in.append',
-        'notes/hmi-t113s4/sync-src.sh',
-        'notes/hmi-t113s4/install-buildroot.sh',
-        'deploy/adb-deploy.sh',
         'tools/gen-i18n.sh',
         'etc/hmi.ini',
         'resources/qss/style.qss',
@@ -321,13 +331,6 @@ def main():
     for f in must:
         if not os.path.isfile(abspath(*f.split('/'))):
             err('缺少交付文件: %s' % f)
-    mk = read(abspath('buildroot/config/buildroot/allwinner/auto/qt-demo/hmi-t113s4/hmi-t113s4.mk'))
-    for token in ('generic-package', 'BR2_PACKAGE_HMI_T113S4', 'SITE_METHOD = local',
-                  '/usr/bin/QtApplication', 'CONFIG+=hmi_no_lrelease'):
-        if token not in mk and token != 'BR2_PACKAGE_HMI_T113S4':
-            err('hmi-t113s4.mk 缺少: %s' % token)
-    if 'BR2_PACKAGE_HMI_T113S4' not in read(abspath('buildroot/config/buildroot/allwinner/auto/qt-demo/hmi-t113s4/Config.in')):
-        err('Config.in 缺少 BR2_PACKAGE_HMI_T113S4')
 
     # 11) 自定义信号 / 槽引用拼写（Qt5 新语法 connect 最容易写错名字）
     class_members = {}
@@ -398,6 +401,42 @@ def main():
         err('MediaService 应把播放动作委托给 PlayerState（状态模式）')
     if 'setState' not in read(abspath('core', 'playerstate.cpp')):
         err('PlayerState 实现应通过 ctx.setState() 迁移状态')
+
+    # 13) 局域网网页文件管理（扫码打开）
+    web_files = [
+        'core/qrcode.h', 'core/httpserver.h',
+        'services/fileservice.h', 'services/webshareservice.h',
+        'widgets/qrcodewidget.h', 'pages/websharepage.h',
+        'resources/web/index.html', 'resources/web/app.css', 'resources/web/app.js',
+    ]
+    for f in web_files:
+        if not os.path.isfile(abspath(*f.split('/'))):
+            err('缺少网页文件管理相关文件: %s' % f)
+
+    qrc = read(abspath('resources', 'resources.qrc'))
+    for token in ('web/index.html', 'web/app.css', 'web/app.js'):
+        if token not in qrc:
+            err('resources.qrc 未内嵌资源: %s' % token)
+
+    wss = read(abspath('services', 'webshareservice.cpp'))
+    for route in ('/api/roots', '/api/list', '/api/download', '/api/upload',
+                  '/api/mkdir', '/api/rename', '/api/delete'):
+        if route not in wss:
+            err('WebShareService 缺少路由: %s' % route)
+
+    fs_cpp = read(abspath('services', 'fileservice.cpp'))
+    if 'canonical' not in fs_cpp or 'm_roots.contains' not in fs_cpp:
+        err('FileService 必须做白名单路径校验（canonical + roots 包含判断）')
+    if 'm_roots.contains(target)' not in fs_cpp:
+        err('FileService 必须禁止删除/改名白名单根目录')
+
+    http_cpp = read(abspath('core', 'httpserver.cpp'))
+    if 'QProcess' in http_cpp:
+        err('HTTP 服务不得调用外部命令')
+    for token in ('MergedChannels', ) :
+        pass
+    if 'bytesToWrite() < kWriteHighWater' not in http_cpp:
+        err('HTTPServer 下载必须按 bytesToWrite 节流，避免一次性载入大文件')
 
     # 汇总
     print('=' * 64)

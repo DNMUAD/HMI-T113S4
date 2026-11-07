@@ -1,9 +1,11 @@
 #include "logpanel.h"
 #include "singleton.h"
+#include "uimetrics.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMetaObject>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -38,20 +40,18 @@ LogPanel::LogPanel(QWidget *parent)
     m_view->setMaximumBlockCount(500);   // 硬约定：只读，限 500 行
     m_view->setObjectName(QStringLiteral("logView"));
 
-    m_clearButton = new QPushButton(tr("清空日志"), this);
+    m_clearButton = new QPushButton(tr("清空"), this);
     m_clearButton->setObjectName(QStringLiteral("logClearButton"));
-    m_clearButton->setMinimumHeight(56);
-    m_clearButton->setMaximumWidth(160);
+    m_clearButton->setFixedHeight(UiMetrics::LogButtonHeight);
+    m_clearButton->setMaximumWidth(76);
     connect(m_clearButton, &QPushButton::clicked, this, &LogPanel::clear);
 
     QWidget *header = new QWidget(this);
     QHBoxLayout *hl = new QHBoxLayout(header);
-    hl->setContentsMargins(8, 0, 0, 0);
-    hl->setSpacing(8);
-    QPushButton *title = new QPushButton(tr("运行日志（命令输出 / stderr）"), header);
+    hl->setContentsMargins(2, 0, 0, 0);
+    hl->setSpacing(6);
+    QLabel *title = new QLabel(tr("运行日志（命令输出 / stderr）"), header);
     title->setObjectName(QStringLiteral("logTitle"));
-    title->setFlat(true);
-    title->setEnabled(false);
     hl->addWidget(title, 1);
     hl->addWidget(m_clearButton);
 
@@ -61,7 +61,7 @@ LogPanel::LogPanel(QWidget *parent)
     root->addWidget(header);
     root->addWidget(m_view, 1);
 
-    setMinimumHeight(120);
+    setMinimumHeight(UiMetrics::LogHeight);
 }
 
 void LogPanel::setMaxLines(int lines)

@@ -15,7 +15,11 @@ public:
 
     QString description() const;
     void setDescription(const QString &text);
-    void setAccent(bool accent);       // 主操作高亮
+    void setAccent(bool accent);       // 主操作高亮（页面里的主按钮）
+    // 导航栏用：未选中时融入深色底，选中时高亮。与 accent 分开，
+    // 避免「总览按钮常驻蓝色 + 列表项选中蓝」两个控件同时像被选中。
+    void setNavMode(bool navMode);
+    void setHighlighted(bool highlighted);
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -26,6 +30,8 @@ protected:
 private:
     QString m_description;
     bool    m_accent;
+    bool    m_navMode;
+    bool    m_highlighted;
 };
 
 #endif // CARDBUTTON_H

@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/">
         <file>qss/style.qss</file>
+        <file>web/index.html</file>
+        <file>web/app.css</file>
+        <file>web/app.js</file>
     </qresource>
     <qresource prefix="/image">
         <file>Icon/common/down_arrow.png</file>

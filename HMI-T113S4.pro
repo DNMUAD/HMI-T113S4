@@ -1,6 +1,5 @@
 # HMI-T113S4 — 全志 T113-S4 板载 HMI 主程序
-# C++11 + qmake，与 SDK 内 qtapp / qt-launcher 保持一致，buildroot 集成最稳。
-# 二进制名保留 HMI-T113S4；buildroot 安装阶段才改名为 /usr/bin/QtApplication。
+# C++11 + qmake。二进制名保留 HMI-T113S4；部署/升级到板端时才改名为 /usr/bin/QtApplication。
 
 QT += core gui widgets multimedia network serialport
 
@@ -38,7 +37,7 @@ HEADERS += \
 RESOURCES += resources/resources.qrc
 
 # 翻译：桌面 Kit 由 qmake 内嵌到 :/i18n/；
-# buildroot 交叉编译传 CONFIG+=hmi_no_lrelease，改由 .mk 单独 lrelease 后装到 /usr/share/hmi/i18n/。
+# 无 lrelease 的环境传 CONFIG+=hmi_no_lrelease，翻译改由 tools/gen-i18n.sh 生成。
 TRANSLATIONS += resources/i18n/HMI-T113S4_zh_CN.ts
 !hmi_no_lrelease {
     CONFIG += lrelease embed_translations
