@@ -27,7 +27,7 @@ BasePage::BasePage(const QString &title, QWidget *parent)
     QLabel *titleLabel = new QLabel(m_title, this);
     titleLabel->setObjectName(QStringLiteral("pageTitle"));
     QFont f = titleLabel->font();
-    f.setPointSize(UiMetrics::TitlePointSize);
+    f.setPixelSize(UiMetrics::TitlePixelSize);
     f.setBold(true);
     titleLabel->setFont(f);           // 只改字号/粗细，字体族交 fontconfig
     root->addWidget(titleLabel);

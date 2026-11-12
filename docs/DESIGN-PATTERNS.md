@@ -274,7 +274,7 @@ void WifiPage::buildContent() { /* 控件 + 信号绑定 */ }
 ### ⑯ 适配器 Adapter —— `ProcessCommandRunner`、`WifiScanModel`
 
 - `ProcessCommandRunner`：把 QProcess 的 `readyRead / finished / errorOccurred + QTimer` 适配成 `submit() → finished(jobId, code, out)`。
-- `WifiScanModel`：把 `wifi -s` / `iw ... scan` 的设备相关文本适配成 `QAbstractListModel` 的行（还顺手做了去重与按信号排序）。
+- `WifiScanModel`：把 `wpa_cli scan_results` / `iw ... scan` 的设备相关文本适配成 `QAbstractListModel` 的行（还顺手做了去重与按信号排序）。
 
 ### ⑰ 空对象 Null Object —— `SimulatedCommandRunner`
 
@@ -303,7 +303,7 @@ class IDeviceService {
 | View | `QListView`（显示与选中） |
 | Controller（薄） | `WifiPage`（把 `activated` 转成「填 SSID / 去连接」） |
 
-- **替代了什么**：把 `wifi -s` 原文塞进 `QPlainTextEdit` —— 能看不能用，换个芯片就得重写解析。
+- **替代了什么**：把扫描原文塞进 `QPlainTextEdit` —— 能看不能用，换个芯片就得重写解析。
 
 ---
 

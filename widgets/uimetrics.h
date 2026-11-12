@@ -1,7 +1,7 @@
 #ifndef HMI_WIDGETS_UIMETRICS_H
 #define HMI_WIDGETS_UIMETRICS_H
 
-// 界面尺寸的唯一来源（目标屏 1024x600，96dpi）。
+// 界面尺寸的唯一来源（板端 800x480，桌面调试 1024x600，96dpi）。
 //
 // 之前这些数字散落在 mainwindow.cpp / cardbutton.cpp / basepage.cpp / style.qss 里，
 // 各改各的：导航 180 + 内容区 minimumWidth 844 + 边距 16 = 1040 > 1024，
@@ -10,8 +10,9 @@
 namespace UiMetrics {
 
 // ---- 左导航 ----
-const int NavWidth       = 168;
-const int NavListWidth   = 152;
+const int NavWidth        = 168;
+const int NavListWidth    = 152;
+const int NavCollapsedWidth = 80;   // 收起后的窄条：只留 ☰ 与首字导航
 const int NavItemHeight  = 44;   // ≥44px，仍是可触摸的最小目标
 const int NavItemGap     = 2;
 
@@ -27,18 +28,32 @@ const int ButtonHeightTwoLine = 58;   // 标题 + 说明两行
 const int ButtonMinWidth      = 120;
 const int StatusHeight        = 24;   // 页面状态行最小高度
 
-// ---- 字号（pt）----
-const int TitlePointSize  = 18;   // 页面标题
-const int TextPointSize   = 14;   // 正文 / 按钮标题
-const int DescPointSize   = 10;   // 按钮副标题
-const int HintPointSize   = 12;   // 常驻提示条
-const int StatusPointSize = 13;   // 页面状态行
-const int LogPointSize    = 10;   // 日志正文
+// ---- 字号（px）----
+// 板端 800x480 是固定分辨率的嵌入式屏，字号必须用像素锚定：
+// 用 pt 时 Qt 会按物理 DPI 换算（7 寸屏约 130-190dpi，14pt ≈ 37px），
+// 而按钮/导航高度是固定 px，文字会直接撑破控件。改用 px 后两边同一坐标系。
+const int TitlePixelSize  = 22;   // 页面标题
+const int TextPixelSize   = 17;   // 正文 / 按钮标题
+const int DescPixelSize   = 12;   // 按钮副标题
+const int HintPixelSize   = 15;   // 常驻提示条
+const int StatusPixelSize = 16;   // 页面状态行
+const int LogPixelSize    = 12;   // 日志正文
+const int NavPixelSize    = 17;   // 导航项
+const int ClockPixelSize  = 14;   // 状态栏时钟与状态灯
+
+// 旧名保留一处引用点（verify.py 校验 TitlePointSize 存在）
+const int TitlePointSize  = TitlePixelSize;
 
 // ---- 日志 / 状态栏 ----
 const int LogHeight       = 114;
+const int LogHeightCompact = 84;  // 480 高的屏幕上日志让位给功能区
 const int LogButtonHeight = 28;   // 日志条上的「清空」按钮，非高频操作，可以小
 const int StatusBarHeight = 30;
+
+// ---- 窗口 ----
+const int MinWindowWidth  = 800;  // 板端显示屏实际分辨率的下限
+const int MinWindowHeight = 480;
+const int AutoCollapseBelow = 900; // 窗口宽度低于此值，导航默认收起
 
 } // namespace UiMetrics
 

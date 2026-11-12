@@ -1,16 +1,11 @@
 #include "websharepage.h"
-#include "logpanel.h"
 #include "pagefactory.h"
 #include "qrcodewidget.h"
 #include "webshareservice.h"
 
-#include <QClipboard>
-#include <QDesktopServices>
-#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QTimer>
-#include <QUrl>
 #include <QVBoxLayout>
 
 WebSharePage::WebSharePage(QWidget *parent)
@@ -60,10 +55,7 @@ void WebSharePage::buildContent()
     buttons->setSpacing(8);
     m_toggle = newButton(tr("启动网页服务"), [this]() { toggleServer(); }, tr("默认端口 8080"), true);
     buttons->addWidget(m_toggle);
-    buttons->addWidget(newButton(tr("复制地址"), [this]() { copyAddress(); },
-                                 tr("粘贴到电脑浏览器")));
-    buttons->addWidget(newButton(tr("本机打开"), [this]() { openLocal(); },
-                                 tr("桌面调试用")));
+    buttons->addStretch(1);
     columnLayout->addLayout(buttons);
     columnLayout->addStretch(1);
 
@@ -164,28 +156,6 @@ void WebSharePage::toggleServer()
             setStatus(tr("启动失败：端口被占用或网络未就绪，详情见日志"));
     }
     refreshUi();
-}
-
-void WebSharePage::copyAddress()
-{
-    const QString link = WebShareService::instance()->url();
-    if (link.isEmpty()) {
-        setStatus(tr("请先启动服务并确保设备已获取 IP"));
-        return;
-    }
-    QGuiApplication::clipboard()->setText(link);
-    LogPanel::post(tr("已复制地址：%1").arg(link), LogPanel::Ok);
-    setStatus(tr("地址已复制到剪贴板"));
-}
-
-void WebSharePage::openLocal()
-{
-    const QString link = WebShareService::instance()->url();
-    if (link.isEmpty()) {
-        setStatus(tr("请先启动服务并确保设备已获取 IP"));
-        return;
-    }
-    QDesktopServices::openUrl(QUrl(link));
 }
 
 HMI_REGISTER_PAGE("web", 100, QT_TR_NOOP("网页管理"), WebSharePage)

@@ -10,7 +10,7 @@
 //
 // /etc/hmi.ini 的读取原本散在 main.cpp 里，键名、默认值、钳制范围到处都是。
 // AppSettings 把「读 ini + 类型转换 + 范围钳制 + 默认值」收进一个门面，
-// 其它模块只问语义化接口：fontPointSize() / processTimeoutMs() / mediaRoots()。
+// 其它模块只问语义化接口：fontPixelSize() / processTimeoutMs() / mediaRoots()。
 class AppSettings : public QObject
 {
     Q_OBJECT
@@ -24,7 +24,7 @@ public:
     void load(const QString &path = QString());
     QString path() const;
 
-    int  fontPointSize() const;         // 12–24
+    int  fontPixelSize() const;         // 12–32（px；pt 会随屏幕 DPI 放大，板端不可控）
     int  logMaxLines() const;           // 100–5000
     int  processTimeoutMs() const;      // 3000–5000（硬约定）
     bool fullScreen() const;
@@ -43,7 +43,7 @@ private:
 
     QString                 m_path;
     QHash<QString, QString> m_values;
-    int                     m_fontPointSize;
+    int                     m_fontPixelSize;
     int                     m_logMaxLines;
     int                     m_processTimeoutMs;
     bool                    m_fullScreen;

@@ -30,7 +30,7 @@ HMI-T113S4/
 │   ├── qrcode.*               二维码编码器（纯 C++，字节模式/L/V1–V10）
 │   ├── httpserver.*           极简 HTTP/1.1 服务端（QTcpServer，流式上传下载）
 │   └── appsettings.*          单例 + 外观：ini 读取与钳制
-├── models/                 wifiscanmodel.*（QAbstractListModel：`wifi -s` 文本 → 可点列表）
+├── models/                 wifiscanmodel.*（QAbstractListModel：`wpa_cli scan_results` 文本 → 可点列表）
 ├── pages/                  basepage(模板方法) + homepage wifipage btpage mediapage i2cpage
 │                           rs485page canpage gpadcpage ethpage adbpage  (10 个页面)
 ├── services/               processrunner(外观) + wifiservice btservice ethservice adbservice
@@ -57,7 +57,7 @@ HMI-T113S4/
 | 约定 | 落地位置 |
 |---|---|
 | C++11 + qmake | `HMI-T113S4.pro`：`CONFIG += c++11`，三个 `.pri` 分片 |
-| 全局字体 16pt、不硬编码字体族 | `main.cpp`：`font.setPointSize()`；中文靠 rootfs `wqy-zenhei` + fontconfig |
+| 全局字体 17px、不硬编码字体族 | `main.cpp`：`font.setPixelSize()`；中文靠 rootfs `wqy-zenhei` + fontconfig |
 | 单实例 | `main.cpp`：`QLocalServer` / `QLocalSocket`，重复启动唤醒已有实例 |
 | `QSettings /etc/hmi.ini` | `main.cpp` 只读；`etc/hmi.ini` 提供样例；缺文件走默认值 |
 | 所有外部命令经 ProcessRunner | `services/processrunner.*` 是外观；真实执行在 `core/processcommandrunner.cpp`：异步 `QProcess` + `MergedChannels` + 3–5s 超时 + 无 `waitFor*` |
@@ -122,7 +122,7 @@ Windows 下配置文件改读程序目录的 `hmi.ini`，默认窗口化，多�
 | 页面 | `pages/websharepage`（导航第 10 项）：开关服务、显示地址/二维码/连接数/最近请求 |
 | U 盘升级 | `pages/upgradepage`（导航第 11 项）：检测 U 盘 → 校验包 → 覆盖主程序/翻译/配置 → 提示重启；引擎见 `services/upgradeservice`，包格式与安全设计见 `docs/UPGRADE.md` |
 
-配置（`/etc/hmi.ini`）：`[web] port=8080 / token= / roots=/mnt/usb,/media,/usr/share,/tmp / autostart=true`。
+配置（`/etc/hmi.ini`）：`[web] port=8080 / token= / roots=/usr,/tmp,/var,/opt,/media / autostart=true`。
 二维码验证：`python tools/qr_verify.py build/qr_selftest.exe`（63 组，全部解码还原）。
 
 ---
@@ -146,7 +146,7 @@ Windows 下配置文件改读程序目录的 `hmi.ini`，默认窗口化，多�
 
 | 里程碑 | 已就位 | 待接入 |
 |---|---|---|
-| M2 WiFi / ETH / ADB | 服务与页面命令已可跑（`wifi -o sta/-s/-c/-d`、`iw` 回退、`ifconfig`/`udhcpc`/`ping`、`S50adb_start`）；状态栏由 `StatusBus` 广播，`ServiceRegistry` 按各自间隔轮询（WiFi/ETH/ADB 5s） | 板端实测 |
+| M2 WiFi / ETH / ADB | WiFi 链路（驱动 + wlan0 + `wifi_daemon`）由 `/etc/init.d/S41wifi` 开机拉起，应用做 `wifi -o sta/-c/-d`、扫描用 `wpa_cli -p <socket 目录> -i wlan0`（回退 `iw`）；ETH/ADB 走 `ifconfig`/`udhcpc`/`ping`、`S50adb_start`；状态栏由 `StatusBus` 广播，`ServiceRegistry` 按各自间隔轮询（WiFi/ETH/ADB 5s） | 板端实测 |
 | M3 I2C / RS485 / GPADC | `I2cService` 只读扫描实现、`Rs485Service` QSerialPort 收发、`GpadcService` 找 eventN + QSocketNotifier + 键码映射 | 指定地址读寄存器、全地址扫描移入工作线程、跳线帽实测 |
 | M4 多媒体 | `MediaService` 播放/音量/错误日志、MediaPage 控件与「软解」标注 | 追加 `QT += multimediawidgets` 后把 `QVideoWidget` 绑到 `MediaService::player()` |
 | M5 CAN | CanPage 设备发现/位速率/up/loopback/cansend 命令链；内核开关说明写在页面提示 | 改 `config-5.4` 开 `CONFIG_CAN/CAN_RAW/CAN_DEV/AWLINK_SUN8I`，再 `qmake CONFIG+=hmi_can`（自动 `QT += serialbus` + `HMI_HAVE_CAN`），补 QCanBus 收发 |

@@ -95,7 +95,7 @@ void LogPanel::appendLine(const QString &message, int level)
     }
 
     const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss"));
-    const QStringList lines = message.split(QLatin1Char('\n'), QString::SkipEmptyParts);
+    const QStringList lines = message.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString &line : lines) {
         QTextCharFormat fmt;
         fmt.setForeground(color);

@@ -2,25 +2,29 @@
 #include "singleton.h"
 
 #include <QCoreApplication>
+#include <QFileInfo>
 #include <QSettings>
 #include <QStandardPaths>
 
 namespace {
 
-// 板端是 7 寸屏，默认全屏；Windows 桌面调试默认窗口化，要全屏在 ini 里写 ui/fullScreen=true
+// 板端是 7 寸屏，默认全屏；Linux 桌面调试默认窗口化，要全屏在 ini 里写 ui/fullScreen=true
 bool defaultFullScreen()
 {
-#ifdef Q_OS_WIN
-    return false;
-#else
+#ifdef HMI_DEVICE_TARGET
     return true;
+#else
+    return false;
 #endif
 }
 
 // 多媒体页扫描的目录：板端挂载点，桌面用系统媒体库
 QStringList defaultMediaRoots()
 {
-#ifdef Q_OS_WIN
+#ifdef HMI_DEVICE_TARGET
+    return QStringList() << QStringLiteral("/mnt/usb") << QStringLiteral("/usr/share")
+                         << QStringLiteral("/mnt") << QStringLiteral("/media");
+#else
     QStringList roots;
     const QStringList candidates = QStringList()
         << QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
@@ -31,9 +35,6 @@ QStringList defaultMediaRoots()
             roots << candidates.at(i);
     }
     return roots;
-#else
-    return QStringList() << QStringLiteral("/mnt/usb") << QStringLiteral("/usr/share")
-                         << QStringLiteral("/mnt") << QStringLiteral("/media");
 #endif
 }
 
@@ -46,16 +47,23 @@ AppSettings *AppSettings::instance()
 
 QString AppSettings::platformConfigPath()
 {
-#ifdef Q_OS_WIN
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/hmi.ini");
-#else
+#ifdef HMI_DEVICE_TARGET
     return QStringLiteral("/etc/hmi.ini");
+#else
+    // 桌面端不写 /etc（普通用户无权限）：优先程序目录，其次当前目录的 etc/
+    const QString beside = QCoreApplication::applicationDirPath() + QStringLiteral("/hmi.ini");
+    if (QFileInfo::exists(beside))
+        return beside;
+    const QString local = QCoreApplication::applicationDirPath() + QStringLiteral("/etc/hmi.ini");
+    if (QFileInfo::exists(local))
+        return local;
+    return beside;
 #endif
 }
 
 AppSettings::AppSettings(QObject *parent)
     : QObject(parent)
-    , m_fontPointSize(14)              // 与 UiMetrics::TextPointSize 对齐；1024x600 下 16pt 偏大
+    , m_fontPixelSize(17)              // 与 UiMetrics::TextPixelSize 对齐；px 锚定，不受屏幕 DPI 影响
     , m_logMaxLines(500)
     , m_processTimeoutMs(4000)
     , m_fullScreen(defaultFullScreen())
@@ -76,8 +84,9 @@ void AppSettings::load(const QString &path)
         m_values.insert(allKeys.at(i), settings.value(allKeys.at(i)).toString());
 
     // 只有 ini 里确实写了才覆盖，避免「文件不存在」时把平台默认值冲掉
+    // ui/fontSize 历史上按 pt 填，现在按 px 解释；范围放宽到 12–32px
     if (settings.contains(QStringLiteral("ui/fontSize")))
-        m_fontPointSize    = qBound(12, settings.value(QStringLiteral("ui/fontSize")).toInt(), 24);
+        m_fontPixelSize    = qBound(12, settings.value(QStringLiteral("ui/fontSize")).toInt(), 32);
     if (settings.contains(QStringLiteral("ui/logMaxLines")))
         m_logMaxLines      = qBound(100, settings.value(QStringLiteral("ui/logMaxLines")).toInt(), 5000);
     if (settings.contains(QStringLiteral("process/timeoutMs")))
@@ -90,7 +99,7 @@ void AppSettings::load(const QString &path)
     m_mediaRoots = defaultMediaRoots();
     const QString roots = settings.value(QStringLiteral("media/roots")).toString();
     if (!roots.trimmed().isEmpty())
-        m_mediaRoots = roots.split(QLatin1Char(','), QString::SkipEmptyParts);
+        m_mediaRoots = roots.split(QLatin1Char(','), Qt::SkipEmptyParts);
 
     emit reloaded();
 }
@@ -100,9 +109,9 @@ QString AppSettings::path() const
     return m_path;
 }
 
-int AppSettings::fontPointSize() const
+int AppSettings::fontPixelSize() const
 {
-    return m_fontPointSize;
+    return m_fontPixelSize;
 }
 
 int AppSettings::logMaxLines() const

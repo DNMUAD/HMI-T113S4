@@ -1,0 +1,168 @@
+#!/bin/sh
+#
+# S41wifi —— 开机装载 AIC8800 WiFi 驱动、拉起 wlan0 与 wifi_daemon
+#
+# 为什么是 S41：rcS 按文件名字典序执行 /etc/init.d/S??*，
+# 排在 S40network（配网卡）之后、S50adb_start 之前，
+# 也早于 S70launcher（启动 Qt 程序）——这样界面起来时 wlan0 和 daemon 已就绪。
+#
+# 调用约定（BusyBox init）：启动执行 `S41wifi start`，关机执行 `S41wifi stop`。
+# 本项目由 /etc/init.d/rcS 触发，rcK 负责反向 stop。
+#
+# start：装载驱动模块 → ifconfig wlan0 up → 启动 wifi_daemon
+# stop ：ifconfig wlan0 down → 结束 wifi_daemon
+#
+# 幂等：重复 start 不会重复 insmod（模块已在则跳过），不会重复起 daemon。
+
+DRV_DIR="/lib/modules/$(uname -r)"
+DRV_BSP="aic8800_bsp.ko"
+DRV_FDRV="aic8800_fdrv.ko"
+WLAN="wlan0"
+DAEMON="wifi_daemon"
+
+log()
+{
+    echo "S41wifi: $*"
+}
+
+# 模块是否已装载：modules/ 目录下同名目录存在即视为已加载
+module_loaded()
+{
+    [ -d "/sys/module/${1%.ko}" ]
+}
+
+# 取 wifi_daemon 的真实 PID。
+# 用 pidof 而不是 pgrep：本板 BusyBox 没有编进 pgrep，
+# 但 pidof 是有的（/bin/pidof -> busybox，项目里 adb 服务也用它查 adbd）。
+# pidof 按进程名精确匹配，daemon 自行 fork 后子进程还叫这个名字，也能找到，
+# 不依赖 start 时 $! 记下的那个 PID（fork 后父进程一退出那个 PID 就失效了）。
+daemon_pids()
+{
+    pidof "$DAEMON" 2>/dev/null
+}
+
+daemon_running()
+{
+    [ -n "$(daemon_pids)" ]
+}
+
+load_driver()
+{
+    # 驱动目录随内核版本变化，先确认存在，避免换成别的内核后静默失败
+    if [ ! -d "$DRV_DIR" ]; then
+        log "驱动目录不存在：$DRV_DIR"
+        return 1
+    fi
+
+    # aic8800_bsp 是总线/电源层，必须早于 fdrv；顺序反了 wlan0 不会出现
+    if module_loaded "$DRV_BSP"; then
+        log "$DRV_BSP 已装载，跳过"
+    else
+        log "装载 $DRV_BSP"
+        insmod "$DRV_DIR/$DRV_BSP" || {
+            log "$DRV_BSP 装载失败"
+            return 1
+        }
+    fi
+
+    if module_loaded "$DRV_FDRV"; then
+        log "$DRV_FDRV 已装载，跳过"
+    else
+        log "装载 $DRV_FDRV"
+        insmod "$DRV_DIR/$DRV_FDRV" || {
+            log "$DRV_FDRV 装载失败"
+            return 1
+        }
+    fi
+
+    # 模块加载是异步的（SDIO 探测 + 固件下载要一两秒），
+    # 这里等 wlan0 节点出现再返回，最多等 3 秒。
+    # 用整数 sleep：BusyBox 的 sleep 不保证支持小数（需 CONFIG_FEATURE_FLOAT_SLEEP）
+    i=0
+    while [ $i -lt 3 ]; do
+        [ -e "/sys/class/net/$WLAN" ] && return 0
+        sleep 1
+        i=$((i + 1))
+    done
+
+    log "等待 $WLAN 节点超时（驱动装载后仍不存在）"
+    return 1
+}
+
+start()
+{
+    load_driver || return 1
+
+    log "打开 $WLAN"
+    ifconfig "$WLAN" up || {
+        log "ifconfig $WLAN up 失败"
+        return 1
+    }
+
+    # daemon 常驻：这里用 & 放后台，父进程（rcS）退出后它继续跑。
+    # 不写 PID 文件：daemon 会自行 fork，$! 拿到的是 fork 前的临时进程，
+    # 存下来反而误导 stop；统一用 pidof 按名字查，逻辑更简单也不会过期。
+    if daemon_running; then
+        log "$DAEMON 已在运行（PID $(daemon_pids)），跳过"
+    else
+        log "启动 $DAEMON"
+        "$DAEMON" &
+        sleep 1
+        if ! daemon_running; then
+            log "警告：$DAEMON 启动后未存活，请检查该程序是否依赖其他服务"
+            return 1
+        fi
+        log "$DAEMON 已就绪（PID $(daemon_pids)）"
+    fi
+
+    log "完成：$WLAN 已 up，$DAEMON 已运行"
+    return 0
+}
+
+stop()
+{
+    log "关闭 $WLAN"
+    ifconfig "$WLAN" down 2>/dev/null
+
+    # 按 PID 结束。daemon 会 fork，用 pidof 拿当前真实 PID，
+    # 逐个 kill；仍有残留再 -9。
+    pids=$(daemon_pids)
+    if [ -n "$pids" ]; then
+        log "结束 $DAEMON（PID $pids）"
+        kill $pids 2>/dev/null
+        sleep 1
+        pids=$(daemon_pids)
+        if [ -n "$pids" ]; then
+            log "$DAEMON 未响应 TERM，强制结束（PID $pids）"
+            kill -9 $pids 2>/dev/null
+        fi
+    fi
+
+    log "已停止"
+    return 0
+}
+
+case "$1" in
+start)
+    start
+    rc=$?
+    ;;
+stop)
+    stop
+    rc=$?
+    ;;
+restart)
+    stop
+    start
+    rc=$?
+    ;;
+*)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+# 把 start/stop 的返回值透传给 rcS：
+# 失败时 rcS 仍会继续跑后面的脚本，但退出码能反映出「S41wifi 没准备好」，
+# 方便 init 日志里一眼看出问题（之前的 exit 0 会把失败吞掉）。
+exit $rc

@@ -26,8 +26,6 @@ protected:
 private slots:
     void refreshUi();
     void toggleServer();
-    void copyAddress();
-    void openLocal();
 
 private:
     QrCodeWidget *m_qr;

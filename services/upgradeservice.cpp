@@ -15,7 +15,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
-#include <QStorageInfo>
 #include <QTimer>
 
 #include <cstdio>
@@ -114,18 +113,6 @@ QStringList UpgradeService::mediaRoots()
     }
 
     QStringList roots;
-#ifdef Q_OS_WIN
-    // 可移动卷；C: 永远排除（那是系统盘，别让升级包往那儿写）
-    const QList<QStorageInfo> vols = QStorageInfo::mountedVolumes();
-    for (const QStorageInfo &v : vols) {
-        if (!v.isValid() || !v.isReady() || v.isReadOnly())
-            continue;
-        const QString root = v.rootPath();
-        if (root.startsWith(QStringLiteral("C:"), Qt::CaseInsensitive))
-            continue;
-        roots << QDir::cleanPath(root);
-    }
-#else
     // /proc/mounts 里挑 sd[b-z] / mmcblk 这类可移动设备的挂载点，
     // 常见于 /media、/run/media、/mnt 下（buildroot 视 udev 规则而定）
     QFile mounts(QStringLiteral("/proc/mounts"));
@@ -147,7 +134,6 @@ QStringList UpgradeService::mediaRoots()
                 roots << mnt;
         }
     }
-#endif
     return roots;
 }
 
@@ -320,24 +306,12 @@ bool UpgradeService::checkEntry(const FileEntry &e, QString *error) const
 
 QString UpgradeService::targetPathFor(const FileEntry &entry)
 {
-#ifdef Q_OS_WIN
-    // 桌面调试不能覆盖正在运行的 exe，落到工作目录下的沙箱里，
-    // 这样复制/备份/回滚的完整逻辑仍然能跑通并被验证。
-    const QString base = QCoreApplication::applicationDirPath()
-                         + QStringLiteral("/_upgrade_target");
-    if (entry.target == QLatin1String("bin"))
-        return base + QStringLiteral("/QtApplication.exe");
-    if (entry.target == QLatin1String("i18n"))
-        return base + QStringLiteral("/i18n/") + QFileInfo(entry.path).fileName();
-    return base + QStringLiteral("/hmi.ini");
-#else
     // 板端实际部署位置（与 buildroot 的安装行一致）
     if (entry.target == QLatin1String("bin"))
         return QStringLiteral("/usr/bin/QtApplication");
     if (entry.target == QLatin1String("i18n"))
         return QStringLiteral("/usr/share/hmi/i18n/") + QFileInfo(entry.path).fileName();
     return QStringLiteral("/etc/hmi.ini");
-#endif
 }
 
 void UpgradeService::install()
@@ -402,14 +376,9 @@ void UpgradeService::stepInstall()
     }
 
     if (error.isEmpty()) {
-        bool moved = false;
-#ifdef Q_OS_WIN
-        QFile::remove(dst);                 // Windows 的 rename 不能覆盖已存在文件
-        moved = QFile::rename(stage, dst);
-#else
-        moved = (std::rename(QFile::encodeName(stage).constData(),
-                             QFile::encodeName(dst).constData()) == 0);
-#endif
+        // rename 原子替换：Linux 允许替换正在运行的二进制，直接 cp 覆盖会 ETXTBSY
+        const bool moved = (std::rename(QFile::encodeName(stage).constData(),
+                                        QFile::encodeName(dst).constData()) == 0);
         if (!moved) {
             error = tr("%1 替换失败").arg(dst);
             QFile::remove(stage);
@@ -464,16 +433,14 @@ void UpgradeService::rollback()
 
 void UpgradeService::restart()
 {
-#ifdef Q_OS_LINUX
+#ifdef HMI_DEVICE_TARGET
     LogPanel::post(tr("正在同步并重启…"), LogPanel::Warn);
     // 先 sync 落盘再 reboot，避免刚写入的文件还在 page cache 里就断电
     QProcess::startDetached(QStringLiteral("sh"),
                             QStringList() << QStringLiteral("-c")
                                           << QStringLiteral("sync; sleep 1; reboot"));
 #else
-    LogPanel::post(tr("桌面环境不执行重启：请手动关闭程序并确认 %1")
-                       .arg(QCoreApplication::applicationDirPath()
-                            + QStringLiteral("/_upgrade_target")),
+    LogPanel::post(tr("桌面环境不执行重启：请手动关闭程序后重新启动"),
                    LogPanel::Warn);
 #endif
 }
@@ -570,11 +537,7 @@ void UpgradeService::setProgress(int percent, const QString &text)
 
 QString UpgradeService::stateFilePath()
 {
-#ifdef Q_OS_WIN
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/_upgrade_state.json");
-#else
     return QStringLiteral("/etc/hmi-upgrade-state.json");
-#endif
 }
 
 bool UpgradeService::writeStateFile(const QString &version, const QString &backupDir)

@@ -1,5 +1,7 @@
 #include "statusdot.h"
+#include "uimetrics.h"
 
+#include <QFontMetrics>
 #include <QPainter>
 
 StatusDot::StatusDot(const QString &label, QWidget *parent)
@@ -39,7 +41,10 @@ QString StatusDot::text() const
 
 QSize StatusDot::sizeHint() const
 {
-    const int w = 24 + fontMetrics().width(m_label + QStringLiteral("  ") + m_text) + 16;
+    QFont f = font();
+    f.setPixelSize(UiMetrics::ClockPixelSize);
+    const QFontMetrics fm(f);
+    const int w = 24 + fm.horizontalAdvance(m_label + QStringLiteral("  ") + m_text) + 16;
     return QSize(qMax(90, w), 30);
 }
 
@@ -63,8 +68,12 @@ void StatusDot::paintEvent(QPaintEvent *)
     p.setBrush(color);
     p.drawEllipse(QPointF(8 + r / 2.0, cy), r / 2.0, r / 2.0);
 
+    QFont f = font();
+    f.setPixelSize(UiMetrics::ClockPixelSize);
+    p.setFont(f);
     p.setPen(palette().color(QPalette::WindowText));
-    p.setFont(font());
     const QString line = m_text.isEmpty() ? m_label : m_label + QStringLiteral(": ") + m_text;
-    p.drawText(QRect(8 + r + 8, 0, width() - r - 16, height()), Qt::AlignVCenter | Qt::AlignLeft, line);
+    const QFontMetrics fm(f);
+    p.drawText(QRect(8 + r + 8, 0, width() - r - 16, height()), Qt::AlignVCenter | Qt::AlignLeft,
+               fm.elidedText(line, Qt::ElideRight, width() - r - 16));
 }

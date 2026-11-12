@@ -149,8 +149,21 @@ def main():
             err('QT 模块缺失: %s' % ', '.join(sorted(missing)))
     if 'CONFIG += c++11' not in pro_text and 'CONFIG += c++1' not in pro_text:
         err('.pro 未启用 C++11')
-    if not re.search(r'^TARGET\s*=\s*HMI-T113S4\s*$', pro_text, re.M):
-        err('TARGET 必须保留 HMI-T113S4（改名只在部署/升级时做）')
+    # TARGET 按构建架构区分：ARM 交叉编译产物叫 QtApplication（板端部署名），
+    # 桌面产物保留 HMI-T113S4 便于和板端区分。两者都必须在架构条件分支里赋值，
+    # 不允许写成无条件的单一 TARGET（那样两个 Kit 会互相覆盖产物）。
+    if not re.search(r'^TARGET\s*=', pro_text, re.M):
+        # 没有无条件 TARGET，要求两个分支各自赋值
+        arch_block = re.search(r'contains\(\s*QT_ARCH[^)]*\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}',
+                               pro_text, re.S)
+        if not arch_block:
+            err('TARGET 未定义，或未按 QT_ARCH 分支赋值')
+        else:
+            arm, desk = arch_block.group(1), arch_block.group(2)
+            if not re.search(r'^\s*TARGET\s*=\s*QtApplication\s*$', arm, re.M):
+                err('ARM 分支的 TARGET 必须为 QtApplication（板端部署名）')
+            if not re.search(r'^\s*TARGET\s*=\s*\S+\s*$', desk, re.M):
+                err('桌面分支缺少 TARGET 赋值')
 
     # 2) 所有含 Q_OBJECT 的头文件必须列入 HEADERS（否则 moc 不生成）
     declared = {os.path.basename(p) for p in sections['HEADERS']}
@@ -253,7 +266,7 @@ def main():
         ('mainwindow.cpp', 'UiMetrics::LogHeight', '日志高度取自 UiMetrics'),
         ('core/appsettings.cpp', '/etc/hmi.ini', 'QSettings /etc/hmi.ini（板端路径）'),
         ('core/appsettings.cpp', 'platformConfigPath', '配置路径按平台选择'),
-        ('main.cpp', 'setPointSize(', '全局字号（不硬编码字体族）'),
+        ('main.cpp', 'setPixelSize(', '全局字号（不硬编码字体族）'),
         ('main.cpp', 'QLocalServer', '单实例'),
         ('mainwindow.cpp', 'new StatusDot', '状态栏状态灯'),
         ('main.cpp', 'installBackend', '策略执行器注入点'),

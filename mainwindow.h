@@ -13,12 +13,13 @@ class QListWidgetItem;
 class QStackedWidget;
 class QLabel;
 class QTimer;
+class QPushButton;
 class BasePage;
 class CardButton;
 class LogPanel;
 class StatusDot;
 
-// 左导航(QListWidget 180px, 9 项) + 内容区 QStackedWidget(设计基准 844x600)
+// 左导航(QListWidget 168px，可收起成 56px 窄条) + 内容区 QStackedWidget
 // + 统一 LogPanel + 状态栏(时间 / WiFi / ETH / ADB)
 //
 // 窗口不再认识任何具体页面或服务：
@@ -34,18 +35,27 @@ public:
 public slots:
     void setCurrentPage(int stackIndex);   // 0=总览，1..9=9 个功能页
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private slots:
     void updateClock();
     void onNavItemClicked(QListWidgetItem *item);
     void onStatusChanged(const DeviceStatus &status);
+    void toggleNav();
 
 private:
     void buildUi();
     void buildPages();
     void buildStatusBar();
     void subscribeStatus();
+    void setNavCollapsed(bool collapsed);
+    void applyNavForm();
+    void applyCompactMetrics();
 
+    QWidget        *m_navPanel;
     QListWidget    *m_nav;
+    QPushButton    *m_navToggle;
     QStackedWidget *m_stack;
     CardButton     *m_homeButton;
     LogPanel       *m_log;
@@ -54,6 +64,9 @@ private:
     QHash<QString, StatusDot *> m_dots;    // device id → 状态灯
     QList<BasePage *> m_pages;
     QList<int>        m_navPages;          // 导航行 → 页面索引（总览不占导航）
+    bool            m_navCollapsed;
+    bool            m_navUserOverride;     // 用户手动切换过，就不再按宽度自动收起
+    bool            m_compact;             // 480 高屏幕：日志让位给功能区
     int             m_current;
 };
 

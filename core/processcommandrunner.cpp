@@ -41,15 +41,9 @@ int ProcessCommandRunner::submit(const CommandSpec &spec)
     emit started(id, job.command);
 
     if (spec.isShellCommand()) {
-#ifdef Q_OS_WIN
-        proc->start(QStringLiteral("cmd"),
-                    QStringList() << QStringLiteral("/C") << spec.programName(),
-                    QIODevice::ReadWrite);
-#else
         proc->start(QStringLiteral("/bin/sh"),
                     QStringList() << QStringLiteral("-c") << spec.programName(),
                     QIODevice::ReadWrite);
-#endif
     } else {
         proc->start(spec.programName(), spec.arguments(), QIODevice::ReadWrite);
     }

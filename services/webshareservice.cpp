@@ -19,16 +19,16 @@
 
 namespace {
 
-// 默认可访问目录：板端是挂载点，Windows 桌面版是用户目录 + 临时目录。
-// 生产环境请勿把根目录加进来——本程序以 root 运行。
+// 默认可访问目录：板端给整机常用目录，Linux 桌面端是用户目录 + 临时目录。
+// 白名单只影响「HTTP 能浏览到哪些路径」，删除/改名/上传仍在 FileService 里二次校验。
 QString defaultWebRootsSpec()
 {
-#ifdef Q_OS_WIN
+#ifdef HMI_DEVICE_TARGET
+    return QStringLiteral("/usr,/tmp,/var,/opt,/media");
+#else
     QStringList roots = QStringList() << QDir::homePath() << QDir::tempPath();
     roots.removeDuplicates();
     return roots.join(QLatin1Char(','));
-#else
-    return QStringLiteral("/mnt/usb,/media,/usr/share,/tmp");
 #endif
 }
 
@@ -82,7 +82,7 @@ WebShareService::WebShareService(QObject *parent)
     m_token = settings->value(QStringLiteral("web/token")).trimmed();
 
     QStringList roots = settings->value(QStringLiteral("web/roots"), defaultWebRootsSpec())
-                            .split(QLatin1Char(','), QString::SkipEmptyParts);
+                            .split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (int i = 0; i < roots.size(); ++i)
         roots[i] = roots.at(i).trimmed();
     FileService::instance()->setRoots(roots);

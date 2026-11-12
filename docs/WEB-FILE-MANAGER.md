@@ -71,7 +71,7 @@ services/fileservice       路径沙箱（白名单 + canonical）+ 目录/改�
 [web]
 port=8080            ; 被占用时自动尝试后面 9 个端口
 token=               ; 留空=免令牌；填了就必须带 ?k=
-roots=/mnt/usb,/media,/usr/share,/tmp
+roots=/usr,/tmp,/var,/opt,/media
 autostart=true       ; false 则在「网页管理」页手动启动
 ```
 

@@ -1,5 +1,5 @@
 # HMI-T113S4 — 全志 T113-S4 板载 HMI 主程序
-# C++11 + qmake。二进制名保留 HMI-T113S4；部署/升级到板端时才改名为 /usr/bin/QtApplication。
+# C++11 + qmake。二进制名保留 HMI-T113S4；部署/升级到板端时才改名为 QtApplication。
 
 QT += core gui widgets multimedia network serialport
 
@@ -11,11 +11,23 @@ hmi_can {
 }
 
 TEMPLATE = app
-TARGET   = HMI-T113S4
+#TARGET   = HMI-T113S4
 
 CONFIG += c++11
 CONFIG -= app_bundle
 QMAKE_CXXFLAGS += -Wno-unused-parameter -Wno-reorder
+
+# 两个构建目标，只区分 Linux 桌面与 Linux 板端，不涉及 Windows：
+#   HMI_DESKTOP         x86/x86_64 桌面 Kit：窗口化、读程序目录配置、用户媒体库
+#   HMI_DEVICE_TARGET   ARM 交叉编译：全屏、/etc/hmi.ini、板端挂载点与设备节点
+# contains() 是子串匹配，arm 已能命中 armv7/aarch64 等取值
+contains(QT_ARCH, arm) {
+    TARGET   = QtApplication
+    DEFINES += HMI_DEVICE_TARGET
+} else {
+    TARGET   = HMI-T113S4
+    DEFINES += HMI_DESKTOP
+}
 
 INCLUDEPATH += $$PWD/pages $$PWD/services $$PWD/widgets $$PWD/core $$PWD/models
 
@@ -37,8 +49,5 @@ HEADERS += \
 RESOURCES += resources/resources.qrc
 
 # 翻译：桌面 Kit 由 qmake 内嵌到 :/i18n/；
-# 无 lrelease 的环境传 CONFIG+=hmi_no_lrelease，翻译改由 tools/gen-i18n.sh 生成。
+# 翻译改由 tools/gen-i18n.sh 生成。
 TRANSLATIONS += resources/i18n/HMI-T113S4_zh_CN.ts
-!hmi_no_lrelease {
-    CONFIG += lrelease embed_translations
-}

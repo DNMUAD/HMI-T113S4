@@ -161,9 +161,11 @@ void hmiMessageHandler(QtMsgType type, const QMessageLogContext &, const QString
 
 int main(int argc, char *argv[])
 {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
-    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-#endif
+    // 板端是固定分辨率的嵌入式屏（800x480），界面按物理像素 1:1 排版。
+    // 不能开 AA_EnableHighDpiScaling：eglfs 上报的 DPI 约 130-190，
+    // 开启后 Qt 按 round(dpi/96) 取整放大整窗（常见 ×2），800x480 的屏
+    // 会被排成 1600x960 的逻辑尺寸，控件全被撑出屏幕——实机「挤在一起、字体很大」即此。
+    // 字号统一改用像素（见 UiMetrics），不再受 DPI 影响。
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("HMI-T113S4"));
     app.setApplicationVersion(QStringLiteral("1.0.0-M1"));
@@ -189,9 +191,10 @@ int main(int argc, char *argv[])
     const bool windowed = args.contains(QStringLiteral("--windowed"));
     const bool simulate = args.contains(QStringLiteral("--simulate")) || settings->simulated();
 
-    // 全局字体只设字号，字体族交给 rootfs 的 fontconfig（wqy-zenhei）
+    // 全局字体只设字号，字体族交给 rootfs 的 fontconfig（wqy-zenhei）。
+    // 用像素而非 pt：pt 会随屏幕物理 DPI 换算，板端 7 寸屏上会放大到撑破控件。
     QFont font = app.font();
-    font.setPointSize(settings->fontPointSize());
+    font.setPixelSize(settings->fontPixelSize());
     app.setFont(font);
 
     installTranslators(app);
@@ -208,9 +211,9 @@ int main(int argc, char *argv[])
     // 命令模式：Invoker 与执行器解耦，这里完成最后一次装配
     CommandInvoker::instance()->setRunner(ProcessRunner::instance()->backend());
 
-    LogPanel::post(QStringLiteral("HMI-T113S4 %1 启动，配置 %2，全局字体 %3pt，命令超时 %4ms，执行器 %5")
+    LogPanel::post(QStringLiteral("HMI-T113S4 %1 启动，配置 %2，全局字体 %3px，命令超时 %4ms，执行器 %5")
                    .arg(app.applicationVersion(), settings->path())
-                   .arg(settings->fontPointSize())
+                   .arg(settings->fontPixelSize())
                    .arg(settings->processTimeoutMs())
                    .arg(ProcessRunner::instance()->backendName()),
                    LogPanel::Ok);
@@ -231,6 +234,15 @@ int main(int argc, char *argv[])
         w.raise();
         w.activateWindow();
     });
+
+    // 板端屏 800x480 的回归手段：--size 800x480 把窗口定到该尺寸，
+    // 配合 --shot 就能在桌面上核对小屏排版，不必真的上板。
+    const int sizeArg = args.indexOf(QStringLiteral("--size"));
+    if (sizeArg > 0 && sizeArg + 1 < args.size()) {
+        const QStringList wh = args.at(sizeArg + 1).split(QLatin1Char('x'));
+        if (wh.size() == 2 && wh.at(0).toInt() > 0 && wh.at(1).toInt() > 0)
+            w.resize(wh.at(0).toInt(), wh.at(1).toInt());
+    }
 
     if (settings->fullScreen() && !windowed)
         w.showFullScreen();

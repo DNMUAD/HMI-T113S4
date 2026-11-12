@@ -113,7 +113,7 @@ void CardButton::paintEvent(QPaintEvent *)
         return;
 
     QFont titleFont = font();
-    titleFont.setPointSize(UiMetrics::TextPointSize);
+    titleFont.setPixelSize(UiMetrics::TextPixelSize);
     titleFont.setBold(true);
     const QFontMetrics tm(titleFont);
 
@@ -126,7 +126,7 @@ void CardButton::paintEvent(QPaintEvent *)
     }
 
     QFont descFont = font();
-    descFont.setPointSize(UiMetrics::DescPointSize);
+    descFont.setPixelSize(UiMetrics::DescPixelSize);
     const QFontMetrics dm(descFont);
 
     // 两行按真实行高居中排布，不再用 height()/2 硬切，避免不同字号下文字互相压边
