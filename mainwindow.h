@@ -17,6 +17,7 @@ class QPushButton;
 class BasePage;
 class CardButton;
 class LogPanel;
+class SoftKeyboard;
 class StatusDot;
 
 // 左导航(QListWidget 168px，可收起成 56px 窄条) + 内容区 QStackedWidget
@@ -49,6 +50,7 @@ private:
     void buildPages();
     void buildStatusBar();
     void subscribeStatus();
+    void buildSoftKeyboard();
     void setNavCollapsed(bool collapsed);
     void applyNavForm();
     void applyCompactMetrics();
@@ -59,6 +61,8 @@ private:
     QStackedWidget *m_stack;
     CardButton     *m_homeButton;
     LogPanel       *m_log;
+    SoftKeyboard   *m_keyboard;
+    QWidget        *m_central;
     QLabel         *m_clock;
     QTimer         *m_clockTimer;
     QHash<QString, StatusDot *> m_dots;    // device id → 状态灯

@@ -44,6 +44,16 @@ const int ClockPixelSize  = 14;   // 状态栏时钟与状态灯
 // 旧名保留一处引用点（verify.py 校验 TitlePointSize 存在）
 const int TitlePointSize  = TitlePixelSize;
 
+// ---- 软键盘 ----
+// 800x480 屏：4 行键（3 行字符 + 1 行功能键）占 185px，约 38% 屏高，
+// 剩下的画布仍能看到输入框本身。键高 40px 略小于按钮 42px，
+// 因为键盘一次要排 10 列，横向单键只剩 (800-16)/10 ≈ 78px，等比缩小更好看。
+const int SoftKeyHeight   = 40;
+const int SoftKeySpacing  = 3;
+const int SoftKeyMargin   = 8;
+const int SoftKeyColumns  = 10;          // 字符行固定 10 列，所有布局按此对齐
+const int SoftKeyboardHeight = SoftKeyHeight * 4 + SoftKeySpacing * 3 + SoftKeyMargin * 2;
+
 // ---- 日志 / 状态栏 ----
 const int LogHeight       = 114;
 const int LogHeightCompact = 84;  // 480 高的屏幕上日志让位给功能区

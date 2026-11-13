@@ -227,7 +227,24 @@ def main():
                                                  clean.count(op), clean.count(cl)))
 
     # 7) 硬约定：外部命令只能经 ProcessRunner，禁止阻塞 UI
-    banned = re.compile(r'waitForFinished|waitForStarted|QProcess::execute|\bsystem\s*\(|\bpopen\s*\(|QThread::(sleep|msleep|usleep)')
+    #
+    # 这里禁的是「等对端」的三个 waitFor*：等待时长由网络/串口对方决定，
+    # 写在事件循环里（尤其 readyRead 回调里）就是整个界面卡死——
+    # 事件循环被占住，重绘和输入全停。
+    #   waitForReadyRead  —— 等对端发数据，对方可能永远不发
+    #   waitForDisconnected —— 等对端断开，对方可能一直连着
+    #   waitForFinished/waitForStarted —— 等子进程，通常伴随 ProcessRunner 违规直调
+    # 本项目已有非阻塞方案：QTcpSocket 用 readyRead/disconnected 信号，
+    # 串口用 QSerialPort::readyRead，命令执行用 ProcessRunner（信号 + 定时器，从不 waitFor*）。
+    #
+    # 注 1：waitForBytesWritten / waitForConnected 不在禁用之列。前者写入本地
+    #       buffer 后通常毫秒级返回，后者是明确的连接建立等待；两者都只用于
+    #       启动期或明确有界的短等待（实测 main.cpp 的 200ms 上界可接受）。
+    # 注 2：本规则只扫下面这几个目录，main.cpp 不在扫描范围内 —— 启动期
+    #       （app.exec() 之前，尚无事件循环可让出）的短等待属合理用法。
+    banned = re.compile(r'waitForFinished|waitForStarted|waitForReadyRead|waitForDisconnected'
+                        r'|QProcess::execute|\bsystem\s*\(|\bpopen\s*\('
+                        r'|QThread::(sleep|msleep|usleep)')
     for folder in ('pages', 'services', 'widgets', 'core', 'models'):
         for dirpath, _, filenames in os.walk(abspath(folder)):
             for fn in filenames:

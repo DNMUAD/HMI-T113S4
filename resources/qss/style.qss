@@ -7,6 +7,42 @@
      NavItemHeight 44 / ButtonHeight 42 / LogHeight 114(紧凑 84) / StatusBarHeight 30
      TitlePixelSize 22 / TextPixelSize 17 / HintPixelSize 15 / StatusPixelSize 16 / LogPixelSize 12 */
 
+/* ---- 软键盘（纯 QWidget，贴底停靠）----
+   键高/间距与 widgets/uimetrics.h 的 SoftKeyHeight / SoftKeySpacing 对应：
+   40px 高，4 行 + 3 道间距 + 上下边距 8 = 185px */
+#softKeyboard {
+    background-color: #E8EDF5;
+    border-top: 2px solid #4187F0;
+}
+#softKeyboard QPushButton#softKey {
+    background-color: #FFFFFF;
+    color: #2F3A4A;
+    border: 1px solid #C8D5EA;
+    border-radius: 5px;
+    font-size: 18px;
+}
+#softKeyboard QPushButton#softKey:pressed { background-color: #DCE8FA; }
+#softKeyboard QPushButton#softKeyAccent {
+    background-color: #D7E0EE;
+    color: #2F3A4A;
+    border: 1px solid #BCC9DD;
+    border-radius: 5px;
+    font-size: 16px;
+}
+#softKeyboard QPushButton#softKeyAccent:pressed { background-color: #C3CFE2; }
+#softKeyboard QPushButton#softKeyPrimary {
+    background-color: #4187F0;
+    color: #FFFFFF;
+    border: 1px solid #2F6FD0;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: bold;
+}
+#softKeyboard QPushButton#softKeyPrimary:pressed { background-color: #2F6FD0; }
+
+/* 全局有一条 16px 宽的滚动条规则，键盘区域不需要，免得挤掉键宽 */
+#softKeyboard QScrollBar { width: 0px; height: 0px; }
+
 #centralRoot { background-color: #F4F6FA; }
 
 /* 页面滚动区透明：否则内容不满一屏时下半部会露出一大块白色 viewport，

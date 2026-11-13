@@ -5,6 +5,7 @@
 #include "logpanel.h"
 #include "pagefactory.h"
 #include "serviceregistry.h"
+#include "softkeyboard.h"
 #include "statusbus.h"
 #include "statusdot.h"
 #include "uimetrics.h"
@@ -31,6 +32,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_stack(nullptr)
     , m_homeButton(nullptr)
     , m_log(nullptr)
+    , m_keyboard(nullptr)
+    , m_central(nullptr)
     , m_clock(nullptr)
     , m_clockTimer(nullptr)
     , m_navCollapsed(false)
@@ -41,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
     buildUi();
     buildPages();
     buildStatusBar();
+    buildSoftKeyboard();
     subscribeStatus();
 
     setCurrentPage(0);
@@ -63,6 +67,7 @@ void MainWindow::buildUi()
 
     QWidget *central = new QWidget(this);
     central->setObjectName(QStringLiteral("centralRoot"));
+    m_central = central;
     QHBoxLayout *root = new QHBoxLayout(central);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
@@ -201,6 +206,20 @@ void MainWindow::resizeEvent(QResizeEvent *event)
     applyCompactMetrics();
     if (!m_navUserOverride)
         setNavCollapsed(width() < UiMetrics::AutoCollapseBelow);
+    if (m_keyboard && m_keyboard->isVisible())
+        m_keyboard->reposition();
+}
+
+// 软键盘作为 centralRoot 的子控件贴底停靠。
+// 不用独立顶层窗口：板端 QPA 是 linuxfb，它只支持单窗口，
+// 弹第二个窗口在实机上不是盖不住就是直接不显示。
+void MainWindow::buildSoftKeyboard()
+{
+    if (!m_central)
+        return;
+    m_keyboard = new SoftKeyboard(m_central);
+    m_keyboard->reposition();
+    m_keyboard->attachGlobalFilter();   // 之后任何输入框被点中都会自动弹出
 }
 
 void MainWindow::buildPages()
