@@ -120,6 +120,12 @@ QGridLayout *BasePage::addGrid()
     return grid;
 }
 
+void BasePage::ensureVisible(QWidget *widget)
+{
+    if (widget && m_scroll)
+        m_scroll->ensureWidgetVisible(widget, 0, 0);
+}
+
 CardButton *BasePage::newButton(const QString &text, const std::function<void()> &fn,
                                 const QString &description, bool accent)
 {

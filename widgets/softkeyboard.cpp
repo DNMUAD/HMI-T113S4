@@ -49,15 +49,44 @@ QLineEdit *spinBoxEditor(QAbstractSpinBox *spin)
     return spin ? spin->findChild<QLineEdit *>() : nullptr;
 }
 
+bool isTextInputWidget(QWidget *w)
+{
+    return qobject_cast<QLineEdit *>(w) || qobject_cast<QPlainTextEdit *>(w)
+           || qobject_cast<QTextEdit *>(w) || qobject_cast<QAbstractSpinBox *>(w);
+}
+
+// 只读的文本控件不弹键盘。
+//
+// 键盘唯一的作用就是往控件里写字，只读控件写了也进不去；但它同样会抢焦点，
+// 于是用户点一下「运行日志」或 WiFi 页的「原始输出」想看内容，键盘却先弹出来
+// 盖住半个屏幕 —— 想看的东西正好被挡住，这是纯粹的负收益。
+// 板端受影响的只读控件：LogPanel 的 logView、WiFi 页的原始输出、RS485 的接收区。
+//
+// 返回 false 之后，eventFilter 里点击它会被当成「点到别处」，顺手把键盘收起来。
+bool isEditableTextInput(QWidget *w)
+{
+    if (QLineEdit *edit = qobject_cast<QLineEdit *>(w))
+        return !edit->isReadOnly();
+    if (QPlainTextEdit *edit = qobject_cast<QPlainTextEdit *>(w))
+        return !edit->isReadOnly();
+    if (QTextEdit *edit = qobject_cast<QTextEdit *>(w))
+        return !edit->isReadOnly();
+    if (QAbstractSpinBox *spin = qobject_cast<QAbstractSpinBox *>(w))
+        return !spin->isReadOnly();
+    return false;
+}
+
 // 沿父链找「真正接收文字的那个控件」：
 // 点击 QPlainTextEdit 的 viewport 时事件目标是 viewport，
 // 但焦点控件和插入接口都在 QPlainTextEdit 上。
-QWidget *textInputAncestor(QWidget *w)
+//
+// 命中一个只读控件就直接返回 nullptr，不再继续往上找：
+// 否则会穿过日志框命中它外层某个可编辑控件，出现「点日志弹出键盘」的怪事。
+QWidget *editableAncestor(QWidget *w)
 {
     while (w) {
-        if (qobject_cast<QLineEdit *>(w) || qobject_cast<QPlainTextEdit *>(w)
-                || qobject_cast<QTextEdit *>(w) || qobject_cast<QAbstractSpinBox *>(w))
-            return w;
+        if (isTextInputWidget(w))
+            return isEditableTextInput(w) ? w : nullptr;
         w = w->parentWidget();
     }
     return nullptr;
@@ -303,7 +332,7 @@ void SoftKeyboard::reposition()
 
 bool SoftKeyboard::isTextInput(QWidget *w)
 {
-    return textInputAncestor(w) != nullptr;
+    return editableAncestor(w) != nullptr;
 }
 
 bool SoftKeyboard::isInsideKeyboard(const QWidget *w, const QWidget *keyboard)
@@ -470,7 +499,7 @@ bool SoftKeyboard::eventFilter(QObject *watched, QEvent *event)
     case QEvent::FocusIn: {
         QWidget *w = qobject_cast<QWidget *>(watched);
         if (w && !isInsideKeyboard(w, this)) {
-            if (QWidget *input = textInputAncestor(w))
+            if (QWidget *input = editableAncestor(w))
                 attachTo(input);
         }
         break;
@@ -483,9 +512,9 @@ bool SoftKeyboard::eventFilter(QObject *watched, QEvent *event)
             break;
         if (isInsideKeyboard(w, this))
             break;                       // 点的是键盘自己的键：保持
-        if (textInputAncestor(w))
-            break;                       // 点另一个输入框：attachTo 会接管
-        dismiss();                       // 点到页面空白/按钮：收起
+        if (editableAncestor(w))
+            break;                       // 点另一个可编辑输入框：attachTo 会接管
+        dismiss();                       // 点到页面空白/按钮/只读文本：收起
         break;
     }
     default:

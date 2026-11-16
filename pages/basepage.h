@@ -36,6 +36,12 @@ public:
 
     void addWidget(QWidget *widget);
     QGridLayout *addGrid();                       // 两列按钮排版用
+
+    // 把内容区的某个控件滚进视口。
+    // 800x480 上一屏放不下所有控件，展开/收起某块时若它恰好在视口外，
+    // 用户会觉得「点了没反应」。
+    void ensureVisible(QWidget *widget);
+
     CardButton *newButton(const QString &text, const std::function<void()> &fn,
                           const QString &description = QString(), bool accent = false);
     CardButton *addButton(const QString &text, const std::function<void()> &fn,
