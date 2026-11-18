@@ -4,6 +4,7 @@ HEADERS += \
     $$PWD/singleton.h \
     $$PWD/appsettings.h \
     $$PWD/devicestatus.h \
+    $$PWD/btdevice.h \
     $$PWD/statetable.h \
     $$PWD/statusbus.h \
     $$PWD/ideviceservice.h \

@@ -16,6 +16,7 @@
 
 DRV_DIR="/lib/modules/$(uname -r)"
 DRV_BSP="aic8800_bsp.ko"
+DRV_BTLPM="aic8800_btlpm.ko"
 DRV_FDRV="aic8800_fdrv.ko"
 WLAN="wlan0"
 DAEMON="wifi_daemon"
@@ -65,6 +66,33 @@ load_driver()
         }
     fi
 
+    # aic8800_btlpm 是蓝牙低功耗管理宿主驱动，它创建 /proc/bluetooth/sleep/btwrite。
+    # 为什么需要它：/etc/bluetooth/bt_init.sh 第 17 行要执行
+    #   echo 1 > /proc/bluetooth/sleep/btwrite
+    # 而这个 proc 节点只由 btlpm 提供（bsp 与 fdrv 里都没有 proc_mkdir/bluetooth
+    # 相关符号，strings 查过），所以不装 btlpm 那行 echo 必然报
+    # "No such file or directory"。
+    #
+    # 位置：bsp 之后（modules.dep 里 btlpm 依赖 bsp，它要调 bsp 的
+    # aicbsp_set_subsys）、fdrv 之前。放 fdrv 后面也能加载，但蓝牙上电
+    # 在 fdrv 探测期间就可能被 bt_init.sh 用到，早一点更稳。
+    #
+    # 失败只 warn 不 return：btlpm 只管蓝牙低功耗（sleep/wake GPIO），
+    # 与 WiFi 数据通路无关，它挂了不该连带把 wlan0 和 wifi_daemon 一起拖死。
+    # 而且它与 fdrv 之间没有依赖（modules.dep 里两者都只依赖 bsp），
+    # 所以这里失败不会影响后面的 fdrv。
+    if [ -f "$DRV_DIR/$DRV_BTLPM" ]; then
+        if module_loaded "$DRV_BTLPM"; then
+            log "$DRV_BTLPM 已装载，跳过"
+        else
+            log "装载 $DRV_BTLPM"
+            insmod "$DRV_DIR/$DRV_BTLPM" || \
+                log "警告：$DRV_BTLPM 装载失败，蓝牙低功耗不可用（不影响 WiFi）"
+        fi
+    else
+        log "未找到 $DRV_BTLPM，跳过蓝牙低功耗"
+    fi
+
     if module_loaded "$DRV_FDRV"; then
         log "$DRV_FDRV 已装载，跳过"
     else
@@ -106,7 +134,18 @@ start()
         log "$DAEMON 已在运行（PID $(daemon_pids)），跳过"
     else
         log "启动 $DAEMON"
-        "$DAEMON" &
+        # 必须彻底脱离调用者的 stdio，否则有两重致命问题：
+        #
+        # ① SIGPIPE：本脚本可能被 QProcess 以管道方式执行（应用里的
+        #    「重启链路」就是这样）。sh 退出、QProcess 关闭读端后，
+        #    daemon 下一次往 stdout 写日志（它平时会打 WINF 行）就收到
+        #    SIGPIPE 直接死掉，表现为「扫描久了 wifi_daemon 自己没了」。
+        #    实测：会写 stdout 的进程 100% 死；不写的就能活。
+        # ② SIGHUP：调用方终端/会话结束时一起被带走。
+        #
+        # setsid 进新会话 + 三个 fd 全部指向 /dev/null，两条都解决；
+        # nohup 单独用不够（管道读端关闭仍会 SIGPIPE）。
+        setsid "$DAEMON" < /dev/null > /dev/null 2>&1 &
         sleep 1
         if ! daemon_running; then
             log "警告：$DAEMON 启动后未存活，请检查该程序是否依赖其他服务"

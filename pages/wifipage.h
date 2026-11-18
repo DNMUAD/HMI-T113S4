@@ -1,56 +1,81 @@
 #ifndef WIFIPAGE_H
 #define WIFIPAGE_H
 
-#include <QModelIndex>
+#include <QList>
+#include <QStringList>
 
 #include "basepage.h"
+#include "wifiservice.h"      // ApClient（AP 设备条目：MAC + IP）
 
-class QGridLayout;
 class QLabel;
 class QLineEdit;
 class QListView;
-class QPlainTextEdit;
 class QPushButton;
 class QStackedWidget;
 class QWidget;
 class WifiScanModel;
 
-// AIC8800D80。链路（驱动 + wlan0 + wifi_daemon）由 /etc/init.d/S41wifi 开机拉起，
-// 本页只做三件事：搭界面、把用户动作转成服务调用、订阅状态总线显示结果。
+// WiFi 页：STA / AP 两种模式，一屏内切换。
 //
-// 界面按「常用 / 诊断」两级摆放（800x480 的屏，8 个按钮平铺根本放不下）：
-//   常用：扫描 / 连接 / 断开
-//   诊断：「更多」展开后才出现 —— 检查链路 / 重启链路 / 刷新 IP / 一键联网 / AP 模式
+// 布局（800x480，必须不出现纵向滚动条）：
+//   标题 / 提示 / 状态行
+//   [SSID] [密码]                       ← 输入行
+//   [切换模式] [重启WiFi] [扫描] [连接]  ← 按钮行（按模式变化）
+//   [列表 / 连接设备列表]                ← 与按钮区互斥占位
+//
+// 按钮按模式切换：
+//   STA：扫描 / 连接 / 断开
+//   AP ：开启 / 连接列表 / 关闭
+// 公共按钮：切换模式、重启 WiFi。
 class WifiPage : public BasePage
 {
     Q_OBJECT
 public:
     explicit WifiPage(QWidget *parent = nullptr);
     void onEnter() override;
+    void onLeave() override;
 
 protected:
     void buildContent() override;
 
 private slots:
+    void onModeChanged();
+    void onScanCountdown(int seconds);
+    void onScanRefused(const QString &reason);
     void onScanResult(const QString &raw);
-    void onAccessPointActivated(const QModelIndex &index);
+    void onApClients(const QList<ApClient> &clients);
+    void onApClientsFailed(const QString &reason);
+    void onItemActivated(const QModelIndex &index);
     void onLinkChanged();
-    void onSequenceFinished(const QString &description, bool ok, const QString &summary);
-    void toggleAdvanced();
+    void toggleMode();
+    void doScan();
+    void doConnect();
+    void doDisconnect();
 
 private:
-    QWidget *buildCredentialRow();
-    QWidget *buildAdvancedPanel();
+    void buildInputRow(QWidget *parent);
+    void buildButtonRow(QWidget *parent);
+    void applyMode();
+    void setListMode(bool apClients);
+    void showApClients(const QStringList &lines);
 
     QLineEdit      *m_ssid;
     QLineEdit      *m_password;
     QListView      *m_scanView;
-    QPlainTextEdit *m_rawView;
-    QStackedWidget *m_scanStack;      // 0=扫描列表 1=诊断面板（互斥同一块区域）
-    QWidget        *m_advancedPanel;
-    QPushButton    *m_advancedBtn;
+    QListView      *m_apView;
+    QStackedWidget *m_listStack;
     WifiScanModel  *m_model;
-    bool            m_waitingSequence;
+
+    QPushButton    *m_modeBtn;
+    QPushButton    *m_restartBtn;
+    QPushButton    *m_scanBtn;
+    QPushButton    *m_connectBtn;
+    QPushButton    *m_disconnectBtn;
+    QPushButton    *m_apOpenBtn;
+    QPushButton    *m_apListBtn;
+    QPushButton    *m_apCloseBtn;
+
+    QStringList     m_apLines;
 };
 
 #endif // WIFIPAGE_H

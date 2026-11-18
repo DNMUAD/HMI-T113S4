@@ -68,6 +68,7 @@ AppSettings::AppSettings(QObject *parent)
     , m_processTimeoutMs(4000)
     , m_fullScreen(defaultFullScreen())
     , m_simulated(false)
+    , m_wifiLogLevel(QStringLiteral("error"))
     , m_mediaRoots(defaultMediaRoots())
 {
 }
@@ -95,6 +96,14 @@ void AppSettings::load(const QString &path)
         m_fullScreen       = settings.value(QStringLiteral("ui/fullScreen")).toBool();
     if (settings.contains(QStringLiteral("ui/simulate")))
         m_simulated        = settings.value(QStringLiteral("ui/simulate")).toBool();
+
+    // WiFi 驱动日志等级：只接受白名单里的值，写错了退回 error。
+    // 不让它把任意字符串透传给 wifi -D —— 那是把配置错误变成运行期怪行为。
+    if (settings.contains(QStringLiteral("wifi/logLevel"))) {
+        const QString lv = settings.value(QStringLiteral("wifi/logLevel")).toString().trimmed();
+        m_wifiLogLevel = wifiLogLevels().contains(lv, Qt::CaseInsensitive)
+                         ? lv.toLower() : QStringLiteral("error");
+    }
 
     m_mediaRoots = defaultMediaRoots();
     const QString roots = settings.value(QStringLiteral("media/roots")).toString();
@@ -132,6 +141,22 @@ bool AppSettings::fullScreen() const
 bool AppSettings::simulated() const
 {
     return m_simulated;
+}
+
+QString AppSettings::wifiLogLevel() const
+{
+    return m_wifiLogLevel;
+}
+
+// 与 `wifi -D` 的参数完全一致（见 wifi -h 的 other Options 段）。
+// open/close 控制的是「是否打印 path/file/line 前缀」，不是等级，
+// 但既然驱动认这些参数就一并放行，免得用户想开路径打印时被拒。
+QStringList AppSettings::wifiLogLevels()
+{
+    return QStringList() << QStringLiteral("error") << QStringLiteral("warn")
+                         << QStringLiteral("info") << QStringLiteral("debug")
+                         << QStringLiteral("dump") << QStringLiteral("open")
+                         << QStringLiteral("close");
 }
 
 void AppSettings::setSimulated(bool enabled)

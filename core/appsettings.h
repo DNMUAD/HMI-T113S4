@@ -35,6 +35,18 @@ public:
     QString value(const QString &key, const QString &fallback = QString()) const;
     QStringList keys() const;
 
+    // WiFi 驱动日志等级（wifi -D 的参数）。
+    //
+    // AIC8800 默认会往内核日志打大量 AICWFDBG(LOGTRACE/LOGDEBUG)，
+    // 这些经 klogd→syslogd 落到 /var/log/messages（本板 /var/log -> /tmp，
+    // 所以实际是 /tmp/messages），既占 tmpfs 又拖慢串口输出。
+    //
+    // 取值：error / warn / info / debug / dump / open / close，默认 error。
+    // 说明：等级只影响驱动自己的打印，不影响 wifi/wpa_cli 的输出内容，
+    // 因此扫描、连接拿到的数据与等级无关。
+    QString wifiLogLevel() const;
+    static QStringList wifiLogLevels();
+
 signals:
     void reloaded();
 
@@ -48,6 +60,7 @@ private:
     int                     m_processTimeoutMs;
     bool                    m_fullScreen;
     bool                    m_simulated;
+    QString                 m_wifiLogLevel;
     QStringList             m_mediaRoots;
 };
 

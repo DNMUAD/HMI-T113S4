@@ -277,14 +277,17 @@ void MainWindow::buildStatusBar()
     StatusDot *wifiDot = new StatusDot(tr("WiFi"), bar);
     StatusDot *ethDot  = new StatusDot(tr("ETH"), bar);
     StatusDot *adbDot  = new StatusDot(tr("ADB"), bar);
+    StatusDot *btDot   = new StatusDot(tr("BT"), bar);
     m_dots.insert(QStringLiteral("wifi"), wifiDot);
     m_dots.insert(QStringLiteral("eth"), ethDot);
     m_dots.insert(QStringLiteral("adb"), adbDot);
+    m_dots.insert(QStringLiteral("bt"), btDot);
 
     bar->addPermanentWidget(m_clock);
     bar->addPermanentWidget(wifiDot);
     bar->addPermanentWidget(ethDot);
     bar->addPermanentWidget(adbDot);
+    bar->addPermanentWidget(btDot);
 }
 
 void MainWindow::subscribeStatus()

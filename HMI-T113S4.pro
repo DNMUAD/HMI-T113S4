@@ -24,9 +24,28 @@ QMAKE_CXXFLAGS += -Wno-unused-parameter -Wno-reorder
 contains(QT_ARCH, arm) {
     TARGET   = QtApplication
     DEFINES += HMI_DEVICE_TARGET
+
+    # 蓝牙：板端用全志 btmanager（libbtmg.so）。
+    #
+    # 头文件和库都在交叉 sysroot 的 usr/include、usr/lib 下，
+    # qmake -query QT_SYSROOT 指向的正是这个 sysroot，不需要额外 INCLUDEPATH。
+    #
+    # 链接不能只写 -lbtmg。libbtmg.so 是**不完整的**：它把 bluez 的部分内部
+    # 实现和 GATT 协议栈留给了外部（实测 `undefined reference to
+    # gatt_db_remove_service / bt_gatt_client_new / mainloop_quit / log_print ...`）。
+    # 完整依赖列表取自 SDK 里 btmanager demo 的 Makefile
+    # （platform/allwinner/wireless/btmanager/demo/Makefile:3-17），顺序也照抄——
+    # -lbtmg 必须在依赖它的库之前，静态库 -lbluetooth-internal / -lshared-mainloop
+    # 必须放在最后，否则链接器不会回头再解析一次。
+    DEFINES += HMI_HAVE_BT
+    LIBS    += -lbluetooth -ljson-c -lbtmg -ldl -lm -lresolv -lwirelesscom
+    LIBS    += -lglib-2.0 -lgio-2.0 -lgobject-2.0 -lasound -ldbus-1
+    LIBS    += -lbluetooth-internal -lshared-mainloop
 } else {
     TARGET   = HMI-T113S4
     DEFINES += HMI_DESKTOP
+    # 桌面 Kit 不链接 libbtmg（sysroot 里没有）：
+    # 蓝牙走 services/fakebtbackend.*，由 services/ibtbackend.h 的工厂选择。
 }
 
 INCLUDEPATH += $$PWD/pages $$PWD/services $$PWD/widgets $$PWD/core $$PWD/models

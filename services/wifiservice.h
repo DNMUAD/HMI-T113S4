@@ -4,104 +4,160 @@
 #include "deviceservice.h"
 
 #include <QString>
-
+#include <QStringList>
 class CommandSequence;
+class QTimer;
 
-// AIC8800D80。命令全部经 ProcessRunner，参数化传参，不拼 shell。
-// 状态经 StatusBus 广播（状态栏 / WiFi 页都从总线取，不再各自 connect 服务）。
+// AP 模式下的一台已连接设备。
+// IP 可能为空：`wifi -l ap` 只给 MAC，IP 是从 /proc/net/arp 反查的，
+// 设备刚连上、或没走 DHCP 时 ARP 表里还没有它。
+struct ApClient
+{
+    QString mac;
+    QString ip;
+};
+
+// AIC8800D80 + wifimanager（wifi_daemon）的命令封装。
+// 命令全部经 ProcessRunner，参数化传参，不拼 shell；状态经 StatusBus 广播。
 //
-// ── 链路分工（这是本类的核心约定）────────────────────────────────
+// ── 链路分工 ─────────────────────────────────────────────────────
+// 开机阶段由 /etc/init.d/S41wifi 完成（驱动 + wlan0 + wifi_daemon）。
+// 本服务只负责开机之后：模式切换、扫描、连接、AP 热点。
 //
-// 开机阶段由 /etc/init.d/S41wifi 完成（S41：排在 S40network 之后、
-// S70launcher 之前，所以界面起来时链路必然已经就绪）：
+// ── 两种模式 ─────────────────────────────────────────────────────
+//   STA：连上游热点。切换 = `wifi -o sta`，扫描走 wpa_cli。
+//   AP ：自家发热点。切换 = `wifi -f sta`（按 wifimanager 的用法，
+//        必须先关 STA 才能开 AP），开热点 = `wifi -o ap ...`。
 //
-//   1. insmod aic8800_bsp.ko + aic8800_fdrv.ko   —— 挂驱动，出 wlan0
-//   2. ifconfig wlan0 up                          —— 打开节点
-//   3. wifi_daemon                                —— WiFi 管理服务（常驻）
-//
-// 本服务只负责开机之后的部分：
-//
-//   4. wifi -o sta                                —— 切 Station 模式
-//   5. wpa_cli -p <ctrl> -i wlan0 scan / scan_results —— 扫描
-//      （wifi -s 只把命令写进 socket 就退出，结果打在 daemon 的 stdout，
-//        程序抓不到，所以扫描改走 supplicant 的控制接口）
-//   6. wifi -c <ssid> <passwd>                    —— 连接（内部调 udhcpc 取 IP）
-//
-// 所以这里不再自己 insmod / 起 daemon。原因有三：
-//   ① 那套逻辑已收敛到 S41wifi 一个入口，应用内再写一份就是两份实现，迟早不一致；
-//   ② 会和开机脚本抢设备——重复 insmod 只会拿到 EEXIST，重复起 daemon 会抢
-//      /tmp/UNIX_WIFI.domain 这个 socket；
-//   ③ daemon 是常驻进程，用 ProcessRunner 起它要走 3–5s 超时钳制，很容易被误杀。
-//
-// 脚本是幂等的（模块已装载则跳过、daemon 在跑则跳过），所以链路没起来时
-// 直接重跑 `S41wifi start` 就是最省事也最一致的修复手段，不需要第二份 C++ 实现。
+// ── 为什么扫描不用 `wifi -s` ─────────────────────────────────────
+// 这个客户端只把命令写进 /tmp/UNIX_WIFI.domain 就退出，二进制里连
+// read/recv 符号都没有（readelf 确认只有 socket/connect/write），扫描结果
+// 由 wifi_daemon 打到它自己的 stdout —— 应用读不到。所以扫描走
+// wpa_cli（连 wpa_supplicant 控制 socket，结果 printf 到 stdout），
+// 与 daemon 内部用的是同一个 supplicant，数据一致。
 class WifiService : public DeviceService
 {
     Q_OBJECT
 public:
+    enum WifiMode
+    {
+        ModeSta = 0,
+        ModeAp
+    };
+    Q_ENUM(WifiMode)
+
     static WifiService *instance();
 
-    bool driverReady() const;      // wlan0 是否已存在（开机脚本是否已装载驱动）
-    bool daemonReady() const;      // wifi_daemon 是否已在运行
-    bool linkReady() const;        // 两者都就绪 = 开机脚本已经把链路拉起来了
+    bool driverReady() const;      // wlan0 是否存在
+    bool daemonReady() const;      // wifi_daemon 是否在运行
+    bool linkReady() const;        // 两者都就绪
 
-    void prepare();                // 确保链路就绪（必要时重跑 S41wifi start）→ 切 STA
-    void restartLink();            // stop + start 修复链路（daemon 卡死时用）
-    void initSta();                // 第 4 步：wifi -o sta
-    void initAp();                 // wifi -o ap（进阶）
-    void scan();                   // 扫描：wpa_cli（-p 指定 socket 目录），iw 兜底
-    void connectTo(const QString &ssid, const QString &password);  // 第 6 步
-    void disconnect();             // wifi -d
-    void refresh() override;       // ip -4 addr show wlan0
+    WifiMode mode() const;
+    // 切换模式只改内部状态并发出 modeChanged，不执行任何命令 ——
+    // 命令由 enterMode()/页面在合适时机触发，避免「切模式」和「开热点」重复执行。
+    void setMode(WifiMode mode);
 
-    // 命令模式：把「确认链路 → STA → 连接 → 取 IP」封装成可排队的命令序列
+    // 按当前模式开启：STA → `wifi -o sta`；AP → `wifi -f sta`（关掉 STA 让位）。
+    // 链路没起来时先补跑 S41wifi start。
+    void enterMode();
+
+    // 重启 WiFi：S41wifi stop → start → enterMode（整条走 CommandSequence 排队）
+    void restartLink();
+
+    // STA
+    void scan();                   // 触发扫描 + 倒计时，倒计时结束后取结果
+    void stopScan();               // 立即终止本轮扫描（离开页面时调用）
+    void connectTo(const QString &ssid, const QString &password);
+    void disconnect();
     CommandSequence *makeConnectSequence(const QString &ssid, const QString &password);
+
+    // AP
+    void openAp(const QString &ssid, const QString &password,
+                int channel, const QString &security);
+    void listApClients();          // wifi -l ap
+    void closeAp();                // wifi -f ap
+
+    // 把配置里的 wifi/logLevel 下发给驱动（wifi -D <level>）。
+    //
+    // 只影响驱动自己的内核打印（AICWFDBG 那堆 TRACE/DEBUG），
+    // 不影响 wifi / wpa_cli 返回的数据，所以扫描、连接结果与等级无关。
+    // 幂等：同一个等级只下发一次，避免每次进页面都重跑一条命令。
+    void applyLogLevel();
+
+    void refresh() override;       // ip -4 addr show <wlan>
 
 signals:
     void scanResult(const QString &raw);
-    void prepared(bool ok);        // 链路（wlan0 + wifi_daemon）就绪
+    // 扫描被拒绝（链路未就绪 / AP 模式 / 正在切 STA）。
+    //
+    // 必须有一条这样的信号：页面在点「扫描」时就把按钮置灰了，
+    // 如果服务因为前置条件不满足直接 return，就不会有 scanResult
+    // 或 scanCountdown 回来，按钮永远恢复不了 —— 用户看到的就是
+    // 「扫描按钮一直是灰的」。
+    void scanRefused(const QString &reason);
+    // 扫描倒计时：>0 剩余秒数；0 表示倒计时结束；-1 表示本轮被取消
+    void scanCountdown(int seconds);
+    void apClients(const QList<ApClient> &clients);   // wifi -l ap + ARP 反查出的 IP
+    void apClientsFailed(const QString &reason);
+    void modeChanged(WifiService::WifiMode mode);
+    void apOpened(bool ok, const QString &detail);
 
 private slots:
     void onFinished(int jobId, int exitCode, int exitStatus, const QString &out);
     void onFailed(int jobId, const QString &reason);
+    void onScanTick();
 
 private:
     explicit WifiService(QObject *parent = nullptr);
 
-    // prepare() 成功后要接着做的事。
-    // 开机脚本只到 wifi_daemon 为止，而「扫描」和「连接」都必须在 STA 模式下
-    // 才能执行，所以两者都先走 prepare 补齐 STA，再落地各自的动作。
-    enum PendingAction {
-        PendingNone = 0,
-        PendingConnect,
-        PendingScan
+    // 正在执行的单个动作。用状态机而不是给每个 job 一个成员：
+    // jobId 只在提交时确定，回调里靠 jobId 比对分派，动作种类必须记下来。
+    enum Action
+    {
+        ActNone = 0,
+        ActLinkStart,       // 补跑 S41wifi start
+        ActEnterSta,        // wifi -o sta
+        ActEnterFSta,       // wifi -f sta（进 AP 前让位）
+        ActOpenAp,          // wifi -o ap ...
+        ActCloseAp,         // wifi -f ap
+        ActListAp,          // wifi -l ap
+        ActConnect,         // wifi -c ssid pass
+        ActDisconnect,      // wifi -d
+        ActScanTrigger,     // wpa_cli scan
+        ActScanResults      // wpa_cli scan_results
     };
 
     void detectInterfaces();
     bool hasWirelessNode() const;
-    void stepPrepareNext();
-    void runPendingAction();                           // prepare 结束后执行挂起的动作
-    void doConnect();                                  // 连接动作本体
-    void doScan();                                     // 扫描动作本体
-    void submitScanStep();                             // 提交当前扫描数据源
-    bool scanOutputUsable(const QString &out) const;   // 输出里是否真有 BSS
-    void failPrepare(DeviceState state, const QString &detail);  // 准备失败的统一收尾
-    bool continueLinkFix(const QString &failReason);   // restartLink 的后两段（stop → start → prepare）
+    void runAction(Action action);              // 提交动作本体
+    void finishAction(Action action, bool ok, const QString &out);
+    int  scanSeconds() const;                   // 读配置（wifi/scanSeconds）
+    QString wpaCtrlDir() const;
+    void submitScanStep(int step);
+    bool scanOutputUsable(const QString &out) const;
 
     int  m_scanJob;
     int  m_statusJob;
     int  m_actionJob;
-    int  m_scanStep;               // 扫描步骤：0=wpa_cli scan 1=scan_results 2=iw
-    int  m_scanSeq;                // 扫描轮次；旧定时器回调据此丢弃，防重复点击叠加
-    bool m_preparing;
-    bool m_restarting;             // restartLink 流程进行中
-    int  m_prepareStep;
-    int  m_fixStep;                // 1=stop 已提交，2=start 已提交
-    bool m_staInited;              // 本进程内是否已成功切过 wifi -o sta
-    int  m_pendingAction;          // PendingAction，prepare 完成后执行
-    QString m_pendingSsid;
-    QString m_pendingPassword;
-    QString m_wlan;                // 实际无线网卡名（板端 wlan0，桌面可能没有）
+    int  m_action;              // Action
+    WifiMode m_mode;
+    int  m_scanStep;            // 0=wpa_cli scan 1=scan_results 2=iw
+    int  m_scanSeq;             // 扫描轮次；旧定时器回调据此作废
+    int  m_scanLeft;            // 倒计时剩余秒数
+    QTimer *m_scanTimer;
+    bool m_staInited;
+    // 因为「还没切 STA」而拒绝了扫描时置位：等 ActEnterSta 成功后再自动扫一次，
+    // 用户点一次扫描就该出结果，不该要求他点两次。
+    bool m_pendingScanAfterSta;
+    QString m_wlan;
+    QString m_apSsid;
+    QString m_apPassword;
+    QString m_apSecurity;
+    QString m_connectSsid;
+    QString m_connectPassword;
+    QString m_appliedLogLevel;     // 已下发过的等级，避免重复执行 wifi -D
+    QStringList m_apClientMacs;    // 最近一次 wifi -l ap 解析出的设备 MAC
+    QString     m_apIp;            // 热点自身 IP（wifi -l ap 输出里带的）
 };
 
 #endif // WIFISERVICE_H

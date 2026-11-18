@@ -234,6 +234,24 @@ void WifiScanModel::setRawOutput(const QString &rawText)
 
     std::stable_sort(parsed.begin(), parsed.end(), strongerFirst);
 
+    // 轮询扫描时这个方法每秒被调用一次。内容没变就不要 reset：
+    // beginResetModel/endResetModel 会清掉选中项、滚动位置和悬停状态，
+    // 用户正在列表里挑热点时每秒被清一次完全没法用。
+    if (parsed.size() == m_points.size()) {
+        bool same = true;
+        for (int i = 0; i < parsed.size(); ++i) {
+            const WifiAccessPoint &a = parsed.at(i);
+            const WifiAccessPoint &b = m_points.at(i);
+            if (a.ssid != b.ssid || a.bssid != b.bssid
+                    || a.signalDbm != b.signalDbm || a.secure != b.secure) {
+                same = false;
+                break;
+            }
+        }
+        if (same)
+            return;                 // 没变化，什么都不做
+    }
+
     beginResetModel();
     m_points = parsed;
     endResetModel();
