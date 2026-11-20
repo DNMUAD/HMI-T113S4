@@ -3,6 +3,7 @@
 #include "basepage.h"
 #include "cardbutton.h"
 #include "logpanel.h"
+#include "navigationbus.h"
 #include "pagefactory.h"
 #include "serviceregistry.h"
 #include "softkeyboard.h"
@@ -46,6 +47,7 @@ MainWindow::MainWindow(QWidget *parent)
     buildStatusBar();
     buildSoftKeyboard();
     subscribeStatus();
+    subscribeNavigation();
 
     setCurrentPage(0);
 
@@ -242,6 +244,7 @@ void MainWindow::buildPages()
 
         const int stackIndex = m_pages.size();
         m_pages << page;
+        m_pageIds << entry.id;             // 与 m_pages 同下标：NavigationBus 靠它翻译 id
         m_stack->addWidget(page);
 
         if (entry.navText.isEmpty())
@@ -316,6 +319,57 @@ void MainWindow::onStatusChanged(const DeviceStatus &status)
     dot->setText(status.detail.isEmpty() ? deviceStateName(status.state) : status.detail);
 }
 
+// 切页请求总线：物理按键等来源只发请求，由本类翻译成堆栈下标。
+// 本类仍然不认识任何具体服务——它只连 NavigationBus 这一个中介。
+void MainWindow::subscribeNavigation()
+{
+    connect(NavigationBus::instance(), &NavigationBus::pageRequested,
+            this, &MainWindow::onPageRequested);
+    connect(NavigationBus::instance(), &NavigationBus::offsetRequested,
+            this, &MainWindow::onOffsetRequested);
+    connect(NavigationBus::instance(), &NavigationBus::homeRequested,
+            this, &MainWindow::onHomeRequested);
+}
+
+int MainWindow::stackIndexOfPageId(const QString &pageId) const
+{
+    return m_pageIds.indexOf(pageId);
+}
+
+void MainWindow::onPageRequested(const QString &pageId)
+{
+    const int index = stackIndexOfPageId(pageId);
+    if (index < 0) {
+        // 请求了一个不存在的页 id：只记 Debug，不进 Error。
+        // 这类请求可能来自 ini 里存着的旧绑定（动作被删了、id 改了），
+        // 属于「配置滞后」而不是程序错误，不该把日志刷成红色。
+        qDebug("NavigationBus: 未知页面 id %s", qPrintable(pageId));
+        return;
+    }
+    setCurrentPage(index);
+}
+
+void MainWindow::onOffsetRequested(int delta)
+{
+    if (m_pages.isEmpty())
+        return;
+
+    // 越界绕回：最后一页再按「下一页」回到总览。
+    // 用 m_current（当前堆栈下标）而不是导航行号——总览不占导航行，
+    // 两套编号在总览页处不一致。
+    const int total = m_pages.size();
+    int target = m_current + delta;
+    while (target < 0)
+        target += total;
+    target %= total;
+    setCurrentPage(target);
+}
+
+void MainWindow::onHomeRequested()
+{
+    setCurrentPage(0);
+}
+
 void MainWindow::onNavItemClicked(QListWidgetItem *item)
 {
     if (!item)
@@ -353,6 +407,11 @@ void MainWindow::setCurrentPage(int stackIndex)
     // 总览按钮的高亮跟着当前页走：全窗口任何时刻只有一个"选中"视觉
     if (m_homeButton)
         m_homeButton->setHighlighted(stackIndex == 0);
+
+    // 回报给 NavigationBus：相对切页（上一页/下一页）需要知道当前在哪，
+    // 而 services/ 那边不认识 QStackedWidget，只能通过总线问。
+    if (stackIndex < m_pageIds.size())
+        NavigationBus::instance()->setCurrentPageId(m_pageIds.at(stackIndex));
 }
 
 void MainWindow::updateClock()

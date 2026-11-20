@@ -7,6 +7,7 @@ HEADERS += \
     $$PWD/btdevice.h \
     $$PWD/statetable.h \
     $$PWD/statusbus.h \
+    $$PWD/navigationbus.h \
     $$PWD/ideviceservice.h \
     $$PWD/deviceservice.h \
     $$PWD/serviceregistry.h \
@@ -27,6 +28,7 @@ SOURCES += \
     $$PWD/devicestatus.cpp \
     $$PWD/statetable.cpp \
     $$PWD/statusbus.cpp \
+    $$PWD/navigationbus.cpp \
     $$PWD/deviceservice.cpp \
     $$PWD/serviceregistry.cpp \
     $$PWD/commandspec.cpp \

@@ -3,6 +3,7 @@ INCLUDEPATH += $$PWD
 HEADERS += \
     $$PWD/basepage.h \
     $$PWD/homepage.h \
+    $$PWD/gpadcsampleactions.h \
     $$PWD/wifipage.h \
     $$PWD/btpage.h \
     $$PWD/mediapage.h \
@@ -18,6 +19,7 @@ HEADERS += \
 SOURCES += \
     $$PWD/basepage.cpp \
     $$PWD/homepage.cpp \
+    $$PWD/gpadcsampleactions.cpp \
     $$PWD/wifipage.cpp \
     $$PWD/btpage.cpp \
     $$PWD/mediapage.cpp \

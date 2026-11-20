@@ -5,6 +5,7 @@
 #include <QList>
 #include <QMainWindow>
 #include <QString>
+#include <QStringList>
 
 #include "devicestatus.h"
 
@@ -45,15 +46,24 @@ private slots:
     void onStatusChanged(const DeviceStatus &status);
     void toggleNav();
 
+    // NavigationBus 的三个请求：物理按键（GPADC）等外部来源只发请求，
+    // 不直接碰 QStackedWidget。本类负责把「页面 id」翻译成堆栈下标。
+    void onPageRequested(const QString &pageId);
+    void onOffsetRequested(int delta);
+    void onHomeRequested();
+
 private:
     void buildUi();
     void buildPages();
     void buildStatusBar();
     void subscribeStatus();
+    void subscribeNavigation();
     void buildSoftKeyboard();
     void setNavCollapsed(bool collapsed);
     void applyNavForm();
     void applyCompactMetrics();
+
+    int stackIndexOfPageId(const QString &pageId) const;   // 找不到返回 -1
 
     QWidget        *m_navPanel;
     QListWidget    *m_nav;
@@ -68,6 +78,7 @@ private:
     QHash<QString, StatusDot *> m_dots;    // device id → 状态灯
     QList<BasePage *> m_pages;
     QList<int>        m_navPages;          // 导航行 → 页面索引（总览不占导航）
+    QStringList       m_pageIds;           // 页面索引 → 页面 id（NavigationBus 用）
     bool            m_navCollapsed;
     bool            m_navUserOverride;     // 用户手动切换过，就不再按宽度自动收起
     bool            m_compact;             // 480 高屏幕：日志让位给功能区

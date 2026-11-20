@@ -203,3 +203,10 @@ QScrollBar::add-line:horizontal {
     image: url(:/image/Icon/common/right_arrow.png);
 }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }
+
+/* ---- GPADC 按键页：一行一个「按键 → 动作」 ----
+   说明列固定 150px（最长一条是 "K3  键码 373 · 0x175"），
+   次数列 56px 右对齐，剩下的宽度全给动作下拉框。 */
+#keyCaption { color: #3C4457; font-size: 16px; }
+#keyCount   { color: #2F6FD0; font-size: 16px; font-weight: bold; }
+QComboBox#keyActionBox { min-height: 34px; }

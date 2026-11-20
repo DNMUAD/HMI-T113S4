@@ -23,6 +23,7 @@ HMI-T113S4/
 │   ├── commandinvoker.*       调用者：串行队列
 │   ├── devicestatus.h         状态值对象；statetable.* 状态转移表
 │   ├── statusbus.*            观察者 + 中介者：设备状态总线
+│   ├── navigationbus.*        切页请求总线：按键/网页等来源不碰 QStackedWidget
 │   ├── ideviceservice.h       服务抽象；deviceservice.* 服务模板
 │   ├── serviceregistry.*      服务注册表 + 轮询调度
 │   ├── pagefactory.*          页面工厂 + 自注册表
@@ -39,6 +40,7 @@ HMI-T113S4/
 ├── widgets/                uimetrics.h(尺寸唯一来源) LogPanel CardButton StatusDot QrCodeWidget
 ├── resources/              qss/style.qss、i18n/*.ts、web/(手机端网页) → 构建期产出 *.qm
 ├── docs/DESIGN-PATTERNS.md 每个设计模式「在哪 / 为什么 / 替代了什么」
+├── docs/GPADC.md             K1/K2/K3 的键码来源、命名坑、动作表与绑定持久化
 ├── docs/WEB-FILE-MANAGER.md 扫码文件管理：接口表 / 安全模型 / 与 FongMi 的对应
 ├── etc/hmi.ini             板端配置样例
 └── tools/                  verify.py（结构自检）、gen-i18n.sh
@@ -147,7 +149,7 @@ Windows 下配置文件改读程序目录的 `hmi.ini`，默认窗口化，多�
 | 里程碑 | 已就位 | 待接入 |
 |---|---|---|
 | M2 WiFi / ETH / ADB | WiFi 链路（驱动 + wlan0 + `wifi_daemon`）由 `/etc/init.d/S41wifi` 开机拉起，应用做 `wifi -o sta/-c/-d`、扫描用 `wpa_cli -p <socket 目录> -i wlan0`（回退 `iw`）；ETH/ADB 走 `ifconfig`/`udhcpc`/`ping`、`S50adb_start`；状态栏由 `StatusBus` 广播，`ServiceRegistry` 按各自间隔轮询（WiFi/ETH/ADB 5s） | 板端实测 |
-| M3 I2C / RS485 / GPADC | `I2cService` 只读扫描实现、`Rs485Service` QSerialPort 收发、`GpadcService` 找 eventN + QSocketNotifier + 键码映射 | 指定地址读寄存器、全地址扫描移入工作线程、跳线帽实测 |
+| M3 I2C / RS485 / GPADC | `I2cService` 只读扫描实现、`Rs485Service` QSerialPort 收发、`GpadcService` 找 eventN + QSocketNotifier + K1/K2/K3 键码映射 + 可配置动作绑定（详见 `docs/GPADC.md`） | 指定地址读寄存器、全地址扫描移入工作线程、跳线帽实测、按键动作接业务 |
 | M4 多媒体 | `MediaService` 播放/音量/错误日志、MediaPage 控件与「软解」标注 | 追加 `QT += multimediawidgets` 后把 `QVideoWidget` 绑到 `MediaService::player()` |
 | M5 CAN | CanPage 设备发现/位速率/up/loopback/cansend 命令链；内核开关说明写在页面提示 | 改 `config-5.4` 开 `CONFIG_CAN/CAN_RAW/CAN_DEV/AWLINK_SUN8I`，再 `qmake CONFIG+=hmi_can`（自动 `QT += serialbus` + `HMI_HAVE_CAN`），补 QCanBus 收发 |
 | M6 打磨 | 首页内存/负载/温度、页面 `onEnter/onLeave` 钩子、配置化字体与日志行数；网页管理已可用 | watchdog、页面按需加载、启动 <3s、网页端预览播放 |

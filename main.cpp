@@ -1,8 +1,10 @@
 #include "appsettings.h"
 #include "commandinvoker.h"
+#include "gpadcservice.h"
 #include "logpanel.h"
 #include "loggingcommandrunner.h"
 #include "mainwindow.h"
+#include "navigationbus.h"
 #include "processrunner.h"
 #include "simulatedcommandrunner.h"
 #include "upgradeservice.h"
@@ -137,6 +139,90 @@ int runUpgradeSelfTest()
     return 0;
 }
 
+// --gpadc-selftest：无人值守跑通「按键 → 动作 → 切页」整条链路。
+//
+// 为什么要它：GPADC 的真机验证需要板子连着按键，桌面 Kit 没有 /dev/input/eventN，
+// 每次改派发逻辑都只能上板点按钮。这里用 simulateKey() 注入与硬件完全相同的事件，
+// 走同一段 handleCode()/dispatch() 代码，因此可以在 PC 上验证：
+//   · 动作表里确实有切页动作；
+//   · 绑定写入/读回正确；
+//   · 按键按下确实派发到了对应动作，动作确实发出了切页请求。
+// 退出码 0 = 全部通过。
+int runGpadcSelfTest(MainWindow *window)
+{
+    GpadcService *svc = GpadcService::instance();
+    NavigationBus *nav = NavigationBus::instance();
+
+    int failures = 0;
+    const auto expect = [&failures](bool ok, const char *what) {
+        qInfo("[gpadc] %s  %s", ok ? "OK  " : "FAIL", what);
+        if (!ok)
+            ++failures;
+    };
+
+    // 自检会改写绑定并落盘。先把原值存下来，结束时无条件恢复——
+    // 自检是「取证」工具，不该改变设备状态（与 --upgrade-selftest 装完即回滚同一原则）。
+    const QList<GpadcService::KeyInfo> keys = GpadcService::keys();
+    QHash<int, QString> original;
+    for (const GpadcService::KeyInfo &k : keys)
+        original.insert(k.code, svc->binding(k.code));
+
+    // 1) 动作表：内置两项 + 切页示例五项
+    const QList<GpadcService::Action> actions = svc->actions();
+    QStringList ids;
+    for (const GpadcService::Action &a : actions)
+        ids << a.id;
+    qInfo("[gpadc] 动作表：%s", qPrintable(ids.join(QStringLiteral(", "))));
+    expect(ids.contains(QStringLiteral("none")), "内置动作 none 存在");
+    expect(ids.contains(QStringLiteral("echo")), "内置动作 echo 存在");
+    expect(ids.contains(QStringLiteral("gpadc.nav-prev")), "示例动作 nav-prev 存在");
+    expect(ids.contains(QStringLiteral("gpadc.nav-next")), "示例动作 nav-next 存在");
+    expect(ids.contains(QStringLiteral("gpadc.nav-home")), "示例动作 nav-home 存在");
+    expect(ids.contains(QStringLiteral("gpadc.goto-wifi")), "示例动作 goto-wifi 存在");
+    expect(ids.contains(QStringLiteral("gpadc.goto-bt")), "示例动作 goto-bt 存在");
+
+    // 2) 绑定写读：改成 nav-next 再读回
+    svc->setBinding(GpadcService::KeyK2, QStringLiteral("gpadc.nav-next"));
+    expect(svc->binding(GpadcService::KeyK2) == QStringLiteral("gpadc.nav-next"),
+           "K2 绑定写读一致");
+
+    // 3) 派发：按一下 K2，应当发出「下一页」，当前页随之变化
+    const QString before = nav->currentPageId();
+    svc->simulateKey(GpadcService::KeyK2, 1);
+    svc->simulateKey(GpadcService::KeyK2, 0);
+    const QString after = nav->currentPageId();
+    qInfo("[gpadc] 按 K2：页 %s → %s", qPrintable(before), qPrintable(after));
+    expect(before != after, "K2 按一下确实切到了另一页");
+    expect(svc->pressCount(GpadcService::KeyK2) >= 1, "K2 按下计数已累加");
+
+    // 4) 绝对跳转：goto-wifi 应落到 wifi 页（按 id 而不是下标）
+    svc->setBinding(GpadcService::KeyK3, QStringLiteral("gpadc.goto-wifi"));
+    svc->simulateKey(GpadcService::KeyK3, 1);
+    expect(nav->currentPageId() == QStringLiteral("wifi"),
+           "K3 绑 goto-wifi 后按下落到 wifi 页");
+    svc->setBinding(GpadcService::KeyK3, QStringLiteral("gpadc.nav-home"));
+    svc->simulateKey(GpadcService::KeyK3, 1);
+    expect(nav->currentPageId() == QStringLiteral("home"), "K3 绑 nav-home 后按下回到总览");
+
+    // 5) 无动作：绑 none 时不应切页
+    svc->setBinding(GpadcService::KeyK1, QStringLiteral("none"));
+    const QString beforeNone = nav->currentPageId();
+    svc->simulateKey(GpadcService::KeyK1, 1);
+    expect(nav->currentPageId() == beforeNone, "绑 none 时按下不切页");
+
+    // 6) 恢复原有绑定（不覆盖用户的配置）
+    for (const GpadcService::KeyInfo &k : keys) {
+        const QString saved = original.value(k.code);
+        if (!saved.isEmpty())
+            svc->setBinding(k.code, saved);
+    }
+    qInfo("[gpadc] 绑定已恢复：%s", qPrintable(svc->bindingSummary()));
+
+    Q_UNUSED(window)
+    qInfo("[gpadc] 自检结束，失败 %d 项", failures);
+    return failures == 0 ? 0 : 6;
+}
+
 void hmiMessageHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
 {
     const QByteArray line = msg.toLocal8Bit();
@@ -252,6 +338,10 @@ int main(int argc, char *argv[])
     // 升级链路自检：不依赖界面，跑完 扫描→校验→安装→回滚 即退出
     if (args.contains(QStringLiteral("--upgrade-selftest")))
         return runUpgradeSelfTest();
+
+    // GPADC 链路自检：按键 → 动作 → 切页。主窗口必须已建好（页面注册了动作）
+    if (args.contains(QStringLiteral("--gpadc-selftest")))
+        return runGpadcSelfTest(&w);
 
     const int pageArg = args.indexOf(QStringLiteral("--page"));
     if (pageArg > 0 && pageArg + 1 < args.size())

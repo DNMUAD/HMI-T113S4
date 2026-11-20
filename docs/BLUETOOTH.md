@@ -445,27 +445,7 @@ readelf -d QtApplication | grep NEEDED
    是带 Class 的，BONDED 回调有机会正常到达。但 BLE 设备（手环、耳机）通常没有
    r_class，那类设备的配对仍要靠 15s 轮询兜底，未实测。
 
-3. **`aic8800_btlpm.ko` 装上了但 probe 没跑（未解决，不影响功能）。**
-
-   已确认的部分：模块装载成功（`lsmod` 里 `aic8800_btlpm 20480 0`），
-   `S41wifi` 的加载逻辑也对了；dts 节点存在且 `status = "okay"`
-   （烧写的 `sunxi.fex` 里有 `btlpm@0` + `allwinner,sunxi-btlpm`），
-   `&uart1` 也是 okay，pins 为 PG6-PG9、与 PG13/PG14 不冲突。
-
-   但 `/proc/bluetooth` 目录始终不存在，`bt_init.sh:17` 与 `:96` 都报
-   `No such file or directory`，且三份日志里**一条 `[BT_LPM]` 都没有**。
-   `Used by 0` 说明模块没有代码持有，而 `proc_mkdir` 失败会打
-   `Unable to create /proc/bluetooth directory`——这句也没出现，
-   所以判断是 `bluesleep_probe` 根本没被调用。
-
-   待查（上板跑）：
-   ```bash
-   ls /proc/device-tree/ | grep -i bt      # 节点在不在
-   dmesg | grep -iE "btlpm|BT_LPM|bluesleep|sunxi-btlpm"
-   ```
-
-   **影响面**：btlpm 只管低功耗休眠唤醒。日志证明即使它没起来，
-   rfkill 复位、bluetoothd 启动、hci0 就绪、扫描、配对全部正常。
+3. ~~`aic8800_btlpm.ko` 装上了但 probe 没跑~~ —— **已修复，见第十三节**。
 
 4. **`act_init` 的 `is_sync=true` 是否可以被绕过。** 如果改库或换成异步封装能拿到
    非阻塞语义，工作线程的必要性会下降。但那是改厂商库，不在本次范围。
@@ -501,3 +481,148 @@ readelf -d QtApplication | grep NEEDED
 
 `BtService` 保留了 `refresh()` 的原有签名（`IDeviceService` 要求），
 但语义变了：**不再现场查询**，只摊已知状态。这一点在它自己的注释里写清楚了。
+
+---
+
+## 十三、btlpm 修复记录（内核驱动侧）
+
+`/proc/bluetooth` 一直不存在，`bt_init.sh:17` 与 `:96` 报
+`No such file or directory`。修复跨了三个驱动层问题，逐个记下来。
+
+### 13.1 根因一：`bluesleep_init` 从未被调用
+
+模块由三个 `.o` 链接（`aic8800_btlpm/Makefile:7-10`）：
+`aic_bluetooth_main.o`、`rfkill.o`、`lpm.o`。
+
+**`aic8800_btlpm.c` 不在编译列表里**，是个死文件。真正的实现在 `lpm.c:960`
+（`int bluesleep_init(struct platform_device *pdev)`），而 `aic8800_btlpm.c:960`
+那份 `static int __init bluesleep_init(void)` 从不参与编译。
+
+`aic_bluetooth_main.c` 里对它的调用被 `#if 0` 包住，导致 ELF 的 `.init.text`
+只有 184 字节，反汇编只有 `platform_driver_register` →
+`platform_device_alloc("aic-bt")` → `platform_device_add` → `rfkill_bluetooth_init`。
+
+而 `/proc/bluetooth` 是在 `bluesleep_init` 内部的 `proc_mkdir`（`lpm.c:977`）建的，
+probe 成功之后才执行。不调用就永远没有。
+
+**修法**：删掉 `#if 0`/`#endif`，放开 `bluesleep_init(aicbt_pdev)` 调用，
+并把 `//err2:` 放开成 `err2:`（`goto err2` 需要 label）。同时放开
+`#include "lpm.h"`（否则 `bluesleep_init` 是隐式声明）。
+
+### 13.2 根因二：`BT_ERR` 其实是 `pr_debug`，日志被编译期删掉
+
+驱动里：
+
+```c
+#define BT_ERR(fmt, arg...) pr_debug("[BT_LPM] %s: " fmt "\n", __func__, ## arg)
+```
+
+`BT_ERR` 是 `pr_debug` 不是 `pr_err`。而实际内核配置：
+
+```
+# CONFIG_DYNAMIC_DEBUG is not set
+```
+
+Makefile 也没有 `-DDEBUG`，所以 `pr_debug` 展开成 `no_printk`，
+**所有 `[BT_LPM]` 日志在编译期就被删成 `if (0)` 空语句**。
+模块里 `strings` 还能找到 36 条 `[BT_LPM]` 文本，那是死代码里的字符串常量。
+
+这解释了为什么早期 `dmesg | grep -i BT_LPM` 全空、却让人误以为 probe 没跑。
+后续编译带上了 `-DDEBUG`，日志才可见。
+
+### 13.3 根因三：rmmod 后 GPIO 不释放，第二次 insmod `-EBUSY`
+
+放开 `bluesleep_init` 后，第一次 insmod 成功、`/proc/bluetooth/sleep/` 出现，
+但 `rmmod` 再 `insmod` 报：
+
+```
+[BT_LPM] bluesleep_probe: can't request bt_hostwake gpio 206
+[BT_LPM] bluesleep_probe: probe fail, err: -16
+```
+
+`-16` = `-EBUSY`。`gpiolib.c:2687-2694` 里 `FLAG_REQUESTED` 位已置就返回 `-EBUSY`，
+只有 `gpio_free` 能清。
+
+排查过程中排除了两个错误假设：
+
+- **不是少一次 `put`**。`platform_device_unregister` = `del` + `put` 是标准配对，
+  内核里 `8250_core.c:1216-1219` 就这么用。
+- **不是设备引用计数**。账目：`alloc` → 1，`device_add` 开头 `get_device(dev)` → 2，
+  `device_del` 最后一行只 `put_device(parent)`（不减 dev 自身）→ 仍 2，
+  `unregister` 的 `put_device` → 1。
+
+**真正根因**：`devres_release_all` 的触发点在 `dd.c:1182` 的
+`__device_release_driver()`，即**驱动 unbind 时**。而 `aicbt_driver`：
+
+```c
+static struct platform_driver aicbt_driver = {
+	.driver = {
+		.owner = THIS_MODULE,
+		.name = "aic_bt",
+	},
+	//.probe = aicbt_probe,
+	//.remove = aicbt_remove,
+};
+```
+
+`.probe`/`.remove` 都是注释掉的，device（名字 `"aic-bt"`）从未绑定过驱动，
+unbind 不发生，`devres_release_all` 永不执行。另一条路 `core.c:1753` 的
+`device_release` 需要引用归零，如上算得是 1，也不触发。
+
+两条释放路径都断，GPIO 的 `FLAG_REQUESTED` 永远清不掉。
+
+**修法**：在 `bluesleep_exit_proc_only()` 里显式释放：
+
+```c
+if (bsi) {
+	devm_gpio_free(&bsi->pdev->dev, bsi->host_wake);
+	devm_gpio_free(&bsi->pdev->dev, bsi->ext_wake);
+}
+```
+
+用 `devm_gpio_free` 而非 `gpio_free`，因为申请用的是 `devm_gpio_request`
+（`lpm.c:802/848`）。`devm_gpio_free` 内部走 `devres_release` 找到对应项，
+再调 `devm_gpio_release` → `gpio_free`（`gpiolib-devres.c:489-494`）。
+
+注意：这与 `bluesleep_remove` 里的 `gpio_free`（`lpm.c:934/935`）互斥，
+两者不可同时调用。
+
+`devres_release_all` 没有 `EXPORT_SYMBOL`，模块里调不了，所以只能逐项 `devm_gpio_free`。
+
+### 13.4 上板验证（2026-11-20）
+
+```
+# rmmod aic8800_btlpm; echo "rmmod=$?"
+rmmod=0
+
+# insmod /lib/modules/5.4.61/aic8800_btlpm.ko; echo "ret2=$?"
+[BT_LPM] bluesleep_probe: bt_hostwake gpio=206 assert=1
+[BT_LPM] bluesleep_probe: bt_wake gpio=205 assert=1
+[BT_LPM] bluesleep_probe: uart_index (1)
+ret2=0
+
+# ls -l /proc/bluetooth/sleep/
+-rw-rw---- btwrite
+-rw-rw---- lpm
+
+# 第三轮 rmmod && insmod
+ret3=0
+```
+
+**幂等性成立**，反复 rmmod/insmod 不再 `-EBUSY`，`/proc/bluetooth/sleep/`
+每次都正确重建。
+
+### 13.5 一个验证命令的坑
+
+`bluesleep_exit_proc_only` 不是 `__exit` 函数，编译进 `.text` 段（地址 0x1080），
+**不在 `.exit.text`**。`.exit.text` 只有 `aic_bluetooth_mod_exit` 的小桩，
+里面只有一条 `bl <bluesleep_exit_proc_only>`。
+
+所以验证 `devm_gpio_free` 是否加进去，必须用全 ko 统计：
+
+```bash
+objdump -d aic8800_btlpm.ko | grep -c "devm_gpio_free"
+# 期望 4：c58/d3c 是 probe 错误路径原有，10a0/10b4 是 exit 新增
+```
+
+写成 `--section=.exit.text` 会漏报成 0。
